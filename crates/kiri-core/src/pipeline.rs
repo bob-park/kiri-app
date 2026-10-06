@@ -1,0 +1,347 @@
+//! 작업 하나의 전 과정: 다운로드 → (필요하면) 인코딩 → 저장 위치로 이동.
+use crate::{
+    ffmpeg, files,
+    model::{Job, Tools},
+    runner::{self, RunError},
+    ytdlp,
+};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
+use tokio_util::sync::CancellationToken;
+
+pub const ERR_DIR_UNWRITABLE: &str = "error.download_dir_unwritable";
+pub const ERR_NO_OUTPUT: &str = "error.no_output";
+
+#[derive(Clone, Debug)]
+pub struct PipelineCfg {
+    pub tools: Tools,
+    pub hw_accel: bool,
+    pub download_dir: PathBuf,
+    /// 작업 전용 캐시 폴더 (cache/jobs/<id>)
+    pub work_dir: PathBuf,
+    pub log_path: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Stage {
+    Downloading,
+    Encoding,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Report {
+    pub stage: Stage,
+    pub progress: f32,
+    pub speed: Option<String>,
+    pub eta: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PipelineError {
+    Cancelled,
+    /// 사용자에게 보일 메시지. "error." 으로 시작하면 i18n 키.
+    Failed(String),
+}
+
+fn append_log(cfg: &PipelineCfg, lines: &[String]) {
+    if let Some(dir) = cfg.log_path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    if let Ok(mut f) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&cfg.log_path)
+    {
+        for l in lines {
+            let _ = writeln!(f, "{l}");
+        }
+    }
+}
+
+fn fail(cfg: &PipelineCfg, e: RunError) -> PipelineError {
+    match e {
+        RunError::Cancelled => PipelineError::Cancelled,
+        RunError::Failed { ref tail } => {
+            append_log(cfg, tail);
+            PipelineError::Failed(e.summary())
+        }
+        RunError::Spawn(ref msg) => {
+            append_log(cfg, std::slice::from_ref(msg));
+            PipelineError::Failed(e.summary())
+        }
+    }
+}
+
+fn io_fail(e: std::io::Error) -> PipelineError {
+    PipelineError::Failed(e.to_string())
+}
+
+pub async fn run(
+    job: &Job,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    mut report: impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
+    if files::check_writable(&cfg.download_dir).is_err() {
+        return Err(PipelineError::Failed(ERR_DIR_UNWRITABLE.into()));
+    }
+    fs::create_dir_all(&cfg.work_dir).map_err(io_fail)?;
+
+    report(Report {
+        stage: Stage::Downloading,
+        progress: 0.0,
+        speed: None,
+        eta: None,
+    });
+    let args = ytdlp::download_args(&job.url, &job.options, &cfg.tools, &cfg.work_dir);
+    runner::run(&cfg.tools.ytdlp, &args, cancel, |line| {
+        if let Some(p) = ytdlp::parse_progress(line) {
+            report(Report {
+                stage: Stage::Downloading,
+                progress: p.fraction,
+                speed: p.speed,
+                eta: p.eta,
+            });
+        }
+    })
+    .await
+    .map_err(|e| fail(cfg, e))?;
+
+    let downloaded = files::find_media(&cfg.work_dir)
+        .map_err(io_fail)?
+        .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
+    let media = match encode(job, cfg, cancel, &downloaded, &mut report).await? {
+        Some(encoded) => encoded,
+        None => downloaded,
+    };
+    finalize(cfg, &media)
+}
+
+async fn encode(
+    job: &Job,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    input: &Path,
+    report: &mut impl FnMut(Report),
+) -> Result<Option<PathBuf>, PipelineError> {
+    let preset = job.options.preset;
+    let Some(ext) = preset.extension() else {
+        return Ok(None);
+    };
+    let stem = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let out_dir = cfg.work_dir.join("out");
+    fs::create_dir_all(&out_dir).map_err(io_fail)?;
+    let output = out_dir.join(format!("{stem}.{ext}"));
+    let hw = cfg.hw_accel && ffmpeg::hw_capable(preset);
+
+    report(Report {
+        stage: Stage::Encoding,
+        progress: 0.0,
+        speed: None,
+        eta: None,
+    });
+    match encode_once(job, cfg, cancel, input, &output, hw, report).await {
+        Err(e @ RunError::Failed { .. }) if hw => {
+            let mut lines =
+                vec!["videotoolbox encode failed, retrying with software encoder:".to_string()];
+            if let RunError::Failed { tail } = &e {
+                lines.extend(tail.iter().cloned());
+            }
+            append_log(cfg, &lines);
+            encode_once(job, cfg, cancel, input, &output, false, report)
+                .await
+                .map_err(|e| fail(cfg, e))?;
+        }
+        r => r.map_err(|e| fail(cfg, e))?,
+    }
+    Ok(Some(output))
+}
+
+async fn encode_once(
+    job: &Job,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    input: &Path,
+    output: &Path,
+    hw: bool,
+    report: &mut impl FnMut(Report),
+) -> Result<(), RunError> {
+    let args =
+        ffmpeg::encode_args(job.options.preset, hw, input, output).expect("preset with extension");
+    let duration = job.duration_secs;
+    runner::run(&cfg.tools.ffmpeg, &args, cancel, |line| {
+        if let Some(p) = ffmpeg::parse_progress(line, duration) {
+            report(Report {
+                stage: Stage::Encoding,
+                progress: p,
+                speed: None,
+                eta: None,
+            });
+        }
+    })
+    .await
+}
+
+/// 결과물과 자막을 저장 위치로 옮긴다. 같은 이름이 있으면 " (n)" 을 붙인다.
+fn finalize(cfg: &PipelineCfg, media: &Path) -> Result<PathBuf, PipelineError> {
+    let name = media
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("video");
+    let dest = files::unique_path(&cfg.download_dir, name);
+    files::move_file(media, &dest).map_err(io_fail)?;
+    for srt in files::subtitle_files(&cfg.work_dir).unwrap_or_default() {
+        if let Some(n) = srt.file_name().and_then(|n| n.to_str()) {
+            let _ = files::move_file(&srt, &files::unique_path(&cfg.download_dir, n));
+        }
+    }
+    Ok(dest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        model::Preset,
+        testutil::{self, *},
+    };
+    use std::os::unix::fs::PermissionsExt;
+
+    struct Env {
+        _d: tempfile::TempDir,
+        cfg: PipelineCfg,
+    }
+
+    fn env(ytdlp: &str, ffmpeg: &str, hw: bool) -> Env {
+        let d = tempfile::tempdir().unwrap();
+        let bin = d.path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        let cfg = PipelineCfg {
+            tools: testutil::tools(&bin, ytdlp, ffmpeg),
+            hw_accel: hw,
+            download_dir: d.path().join("Movies/kiri"),
+            work_dir: d.path().join("cache/jobs/1"),
+            log_path: d.path().join("logs/1.log"),
+        };
+        Env { _d: d, cfg }
+    }
+
+    async fn go(e: &Env, preset: Preset) -> (Result<PathBuf, PipelineError>, Vec<Report>) {
+        let mut reports = vec![];
+        let r = run(&job(preset), &e.cfg, &CancellationToken::new(), |r| {
+            reports.push(r)
+        })
+        .await;
+        (r, reports)
+    }
+
+    #[tokio::test]
+    async fn original_downloads_and_moves_with_subtitles() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        let (r, reports) = go(&e, Preset::Original).await;
+        let out = r.unwrap();
+        assert_eq!(out, e.cfg.download_dir.join("Fake Video.mp4"));
+        assert!(out.exists());
+        assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
+        assert!(
+            reports
+                .iter()
+                .any(|r| r.stage == Stage::Downloading && r.progress == 0.5)
+        );
+        assert!(reports.iter().all(|r| r.stage == Stage::Downloading));
+    }
+
+    #[tokio::test]
+    async fn encodes_when_preset_needs_it() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        let (r, reports) = go(&e, Preset::MovProres).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video.mov"));
+        assert!(
+            reports
+                .iter()
+                .any(|r| r.stage == Stage::Encoding && r.progress == 0.5)
+        );
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_software_when_videotoolbox_fails() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG_VT_FAILS, true);
+        let (r, _) = go(&e, Preset::Mp4H264).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video.mp4"));
+        let log = fs::read_to_string(&e.cfg.log_path).unwrap();
+        assert!(log.contains("videotoolbox"), "{log}");
+    }
+
+    #[tokio::test]
+    async fn hw_off_never_uses_videotoolbox() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG_VT_FAILS, false);
+        let (r, _) = go(&e, Preset::Mp4H264).await;
+        assert!(r.is_ok());
+        assert!(!e.cfg.log_path.exists()); // 재시도 로그가 없어야 한다
+    }
+
+    #[tokio::test]
+    async fn download_failure_reports_last_line_and_logs_tail() {
+        let e = env(
+            "echo 'ERROR: [youtube] abc: Video unavailable' >&2; exit 1",
+            FAKE_FFMPEG,
+            true,
+        );
+        let (r, _) = go(&e, Preset::Original).await;
+        assert_eq!(
+            r,
+            Err(PipelineError::Failed(
+                "ERROR: [youtube] abc: Video unavailable".into()
+            ))
+        );
+        assert!(
+            fs::read_to_string(&e.cfg.log_path)
+                .unwrap()
+                .contains("Video unavailable")
+        );
+    }
+
+    #[tokio::test]
+    async fn unwritable_download_dir_fails_before_download() {
+        let e = env("touch \"$0.ran\"", FAKE_FFMPEG, true);
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::set_permissions(&e.cfg.download_dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let (r, _) = go(&e, Preset::Original).await;
+        fs::set_permissions(&e.cfg.download_dir, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(r, Err(PipelineError::Failed(ERR_DIR_UNWRITABLE.into())));
+        let ran = e.cfg.tools.ytdlp.with_extension("ran");
+        assert!(!ran.exists(), "yt-dlp must not run");
+    }
+
+    #[tokio::test]
+    async fn existing_file_is_not_overwritten() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(e.cfg.download_dir.join("Fake Video.mp4"), "old").unwrap();
+        let (r, _) = go(&e, Preset::Original).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video (1).mp4"));
+        assert_eq!(
+            fs::read_to_string(e.cfg.download_dir.join("Fake Video.mp4")).unwrap(),
+            "old"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_returns_cancelled() {
+        let e = env("sleep 30", FAKE_FFMPEG, true);
+        let token = CancellationToken::new();
+        let t2 = token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            t2.cancel();
+        });
+        let r = run(&job(Preset::Original), &e.cfg, &token, |_| {}).await;
+        assert_eq!(r, Err(PipelineError::Cancelled));
+    }
+}

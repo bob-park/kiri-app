@@ -2,6 +2,7 @@
 pub mod ffmpeg;
 pub mod files;
 pub mod model;
+pub mod pipeline;
 pub mod runner;
 #[cfg(test)]
 pub(crate) mod testutil;
