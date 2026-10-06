@@ -1,0 +1,4 @@
+[tools]
+node = '24'
+yarn = "4.18.0"
+cmake = "4"
