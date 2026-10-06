@@ -45,25 +45,29 @@ export default function MainWindow() {
   const submit = useCallback(async (source: string | null | Promise<string | null>) => {
     if (inFlight.current) return;
     inFlight.current = true;
+    let url: string | null;
     try {
-      const url = extractUrl(await source);
+      url = extractUrl(await source);
       if (!url) return showError({ code: "invalid_url" });
       if (!useTools.getState().status?.ready) return showError({ code: "ytdlp_missing" });
       if (useSettings.getState().settings?.download.skip_sheet) {
         return await api.addUrl(url).then(() => undefined, showError);
       }
       setSheet({ url, info: null });
-      try {
-        const info = await api.probe(url);
-        setSheet((cur) => (cur?.url === url ? { url, info } : cur));
-      } catch (e) {
-        // 그사이 취소하고 다른 시트를 열었다면 그 시트는 건드리지 않고 오류도 띄우지 않는다.
-        const current = sheetUrl.current === url;
-        setSheet((cur) => (cur?.url === url ? null : cur));
-        if (current) showError(e);
-      }
+      sheetUrl.current = url; // 다시 렌더되기 전부터 ⌘V·드롭을 막는다.
     } finally {
+      // probe 동안에는 열린 시트가 재진입을 막는다. 시트를 취소하면 바로 다시 붙여넣을 수 있고,
+      // 늦게 온 probe 결과는 아래 url 비교가 걸러 낸다. probe는 이 guard 밖에 두어 새 요청의 guard를 풀지 않는다.
       inFlight.current = false;
+    }
+    try {
+      const info = await api.probe(url);
+      setSheet((cur) => (cur?.url === url ? { url, info } : cur));
+    } catch (e) {
+      // 그사이 취소하고 다른 시트를 열었다면 그 시트는 건드리지 않고 오류도 띄우지 않는다.
+      const current = sheetUrl.current === url;
+      setSheet((cur) => (cur?.url === url ? null : cur));
+      if (current) showError(e);
     }
   }, []);
 
