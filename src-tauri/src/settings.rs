@@ -137,8 +137,6 @@ impl Settings {
     }
 }
 
-// Engine 을 붙이는 Task 에서 호출한다. 지금은 테스트만 쓴다.
-#[allow(dead_code)]
 pub fn engine_config(s: &Settings) -> EngineConfig {
     EngineConfig {
         max_concurrent: s.download.max_concurrent.clamp(1, 4) as usize,
@@ -148,6 +146,13 @@ pub fn engine_config(s: &Settings) -> EngineConfig {
         default_preset: s.download.preset.parse().unwrap_or(Preset::Original),
         default_subtitles: s.download.subtitles.clone(),
     }
+}
+
+/// current 에 patch 를 깊게 병합한 새 설정. 형식이 틀리면 Err.
+pub fn apply_patch(current: &Settings, patch: &Value) -> Result<Settings, String> {
+    let mut v = serde_json::to_value(current).map_err(|e| e.to_string())?;
+    merge(&mut v, patch);
+    serde_json::from_value(v).map_err(|e| e.to_string())
 }
 
 pub struct SettingsState {
@@ -165,11 +170,24 @@ impl SettingsState {
         self.current.lock().unwrap().clone()
     }
 
-    pub fn set(&self, app: &AppHandle, new: Settings) -> Result<(), String> {
-        new.save(&self.path).map_err(|e| e.to_string())?;
-        *self.current.lock().unwrap() = new.clone();
-        app.emit("settings-changed", &new)
-            .map_err(|e| e.to_string())
+    /// 잠금을 쥔 채 복사 → f → 저장 → 교체해서 동시 쓰기가 서로를 덮지 않게 한다.
+    /// f 가 Err 면 저장하지 않는다. settings-changed 는 잠금을 놓은 뒤 보낸다.
+    pub fn update(
+        &self,
+        app: &AppHandle,
+        f: impl FnOnce(&mut Settings) -> Result<(), String>,
+    ) -> Result<Settings, String> {
+        let next = {
+            let mut cur = self.current.lock().unwrap();
+            let mut next = cur.clone();
+            f(&mut next)?;
+            next.save(&self.path).map_err(|e| e.to_string())?;
+            *cur = next.clone();
+            next
+        };
+        app.emit("settings-changed", &next)
+            .map_err(|e| e.to_string())?;
+        Ok(next)
     }
 }
 
@@ -241,6 +259,28 @@ mod tests {
         assert_eq!(base["general"]["theme"], "dark");
         assert_eq!(base["general"]["ui_language"], "system");
         assert_eq!(base["download"]["subtitles"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn apply_patch_merges_and_rejects_bad_types() {
+        let mut cur = Settings::default();
+        cur.update.last_ytdlp_check = Some(7);
+        let next = apply_patch(
+            &cur,
+            &serde_json::json!({"download": {"max_concurrent": 3}, "general": {"theme": "dark"}}),
+        )
+        .unwrap();
+        assert_eq!(next.download.max_concurrent, 3);
+        assert_eq!(next.general.theme, "dark");
+        assert_eq!(next.update.last_ytdlp_check, Some(7));
+        assert_eq!(next.download.dir, cur.download.dir);
+        assert!(
+            apply_patch(
+                &cur,
+                &serde_json::json!({"download": {"max_concurrent": "x"}})
+            )
+            .is_err()
+        );
     }
 
     #[test]
