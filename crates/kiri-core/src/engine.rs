@@ -86,12 +86,18 @@ struct Inner {
     tools: Tools,
     rt: Handle,
     listener: Listener,
+    /// 스냅샷 생성과 리스너 호출을 묶어 직렬화한다. 이게 없으면 늦게 만든
+    /// 스냅샷이 먼저 나가서 UI 가 낡은 상태에 멈춘다.
+    notify_lock: Mutex<()>,
 }
 
 #[derive(Clone)]
 pub struct Engine(Arc<Inner>);
 
 impl Engine {
+    /// `listener` 는 큐가 바뀔 때마다 최신 목록으로 호출된다. 호출은 항상 직렬이고
+    /// 순서가 보장된다. 그 대신 리스너 안에서 Engine 의 변경 메서드(add/stop/…)를
+    /// 동기적으로 부르면 안 된다(재진입 교착).
     pub fn new(
         paths: EnginePaths,
         tools: Tools,
@@ -109,6 +115,7 @@ impl Engine {
             tools,
             rt,
             listener: Box::new(listener),
+            notify_lock: Mutex::new(()),
         }));
         engine.save();
         engine
@@ -300,7 +307,10 @@ impl Engine {
         }
     }
 
+    /// 스냅샷 + 리스너 호출을 한 임계 구역에서 처리한다. `state`/`running` 락을
+    /// 잡은 채로 부르지 않는다(락 순서: notify_lock → state).
     fn notify(&self) {
+        let _serial = self.0.notify_lock.lock().unwrap();
         let jobs = self.list();
         (self.0.listener)(&jobs);
     }
@@ -424,6 +434,15 @@ mod tests {
     }
 
     fn engine_at(dir: &Path, ytdlp_body: &str, max: usize) -> Engine {
+        engine_with_listener(dir, ytdlp_body, max, |_| {})
+    }
+
+    fn engine_with_listener(
+        dir: &Path,
+        ytdlp_body: &str,
+        max: usize,
+        listener: impl Fn(&[Job]) + Send + Sync + 'static,
+    ) -> Engine {
         let bin = dir.join("bin");
         fs::create_dir_all(&bin).unwrap();
         let tools = testutil::tools(&bin, &ytdlp_with_probe(ytdlp_body), FAKE_FFMPEG);
@@ -440,7 +459,7 @@ mod tests {
             default_preset: Preset::Original,
             default_subtitles: vec!["ko".into()],
         };
-        Engine::new(paths, tools, cfg, Handle::current(), |_| {})
+        Engine::new(paths, tools, cfg, Handle::current(), listener)
     }
 
     fn env(ytdlp_body: &str, max: usize) -> Env {
@@ -540,6 +559,47 @@ mod tests {
             j.iter().all(|j| j.state == JobState::Completed)
         })
         .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn last_listener_snapshot_is_the_newest_state() {
+        let d = tempfile::tempdir().unwrap();
+        let seen: Arc<Mutex<Vec<Vec<Job>>>> = Arc::new(Mutex::new(Vec::new()));
+        let rec = seen.clone();
+        let overlap = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let inside = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (saw_overlap, counter) = (overlap.clone(), inside.clone());
+        let engine = engine_with_listener(d.path(), FAKE_YTDLP_DOWNLOAD, 2, move |jobs| {
+            use std::sync::atomic::Ordering::SeqCst;
+            // 느린 리스너(실제로는 IPC emit). 직렬화돼 있지 않으면 두 통지가 겹치고,
+            // 먼저 뜬 낡은 스냅샷이 가장 늦게 도착한다.
+            if counter.fetch_add(1, SeqCst) > 0 {
+                saw_overlap.store(true, SeqCst);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+            rec.lock().unwrap().push(jobs.to_vec());
+            counter.fetch_sub(1, SeqCst);
+        });
+        engine.start();
+        engine.add(new_job("a"));
+        engine.add(new_job("b"));
+        wait_for(&engine, |j| {
+            j.len() == 2 && j.iter().all(|j| j.state == JobState::Completed)
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(500)).await; // 남은 알림이 모두 나갈 시간
+        let snapshots = seen.lock().unwrap().clone();
+        assert!(!snapshots.is_empty(), "listener never called");
+        assert!(
+            !overlap.load(std::sync::atomic::Ordering::SeqCst),
+            "listener called concurrently; snapshots can arrive out of order"
+        );
+        let last = snapshots.last().unwrap();
+        assert_eq!(last.len(), 2);
+        assert!(
+            last.iter().all(|j| j.state == JobState::Completed),
+            "stale snapshot emitted last: {last:#?}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
