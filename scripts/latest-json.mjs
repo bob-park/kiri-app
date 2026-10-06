@@ -40,7 +40,7 @@ if (isMain) {
   // 공개키가 비어 있으면 그 빌드는 업데이트를 검증하지 못한다. 받은 뒤에야 실패하므로 여기서 막는다.
   const conf = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
   if (!conf.plugins?.updater?.pubkey || conf.plugins.updater.pubkey === "<PUBKEY>") {
-    console.error("src-tauri/tauri.conf.json: plugins.updater.pubkey is empty (see docs/development.md)");
+    console.error("src-tauri/tauri.conf.json: plugins.updater.pubkey is empty (see docs/develop.md)");
     process.exit(1);
   }
   const dir = mkdtempSync(join(tmpdir(), "kiri-sig-"));
