@@ -3,8 +3,9 @@
     "dropHint": "YouTube 링크를 붙여넣거나(⌘V) 끌어다 놓으세요",
     "empty": "아직 다운로드가 없습니다",
     "settings": "설정",
-    "toolsPreparing": "yt-dlp 준비 중…",
-    "toolsFailed": "yt-dlp를 준비하지 못했습니다: {{error}}",
+    "toolsPreparing": "다운로드 준비 중…",
+    "toolsPreparingDesc": "처음 실행할 때 필요한 구성 요소를 내려받고 있습니다. 잠시만 기다려 주세요.",
+    "toolsFailed": "다운로드 준비에 실패했습니다: {{error}}",
     "retry": "재시도"
   },
   "job": {
@@ -102,7 +103,7 @@
   },
   "error": {
     "invalid_url": "YouTube 링크가 아닙니다",
-    "ytdlp_missing": "yt-dlp를 아직 준비하고 있습니다",
+    "ytdlp_missing": "아직 다운로드 준비 중입니다. 잠시 후 다시 시도해 주세요.",
     "not_found": "작업이 더 이상 없습니다",
     "not_stoppable": "실행 중인 작업이 아닙니다",
     "not_restartable": "다시 시작할 수 없는 작업입니다",

@@ -8,6 +8,7 @@ import { useSettings } from "../lib/settings";
 import { showError } from "../lib/toast";
 import { extractUrl, isEditableTarget } from "../lib/paste";
 import { JobRow } from "../components/JobRow";
+import { Icon } from "../components/Icon";
 import { OptionsSheet } from "../components/OptionsSheet";
 import type { VideoInfo } from "../lib/types";
 
@@ -21,13 +22,22 @@ function ToolsNotice() {
   const status = useTools((s) => s.status);
   if (status?.ready) return null;
   const failed = status?.error && !status.installing;
-  return (
-    <div role="status" className={`mx-3 mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${failed ? "bg-error/15 text-error" : "bg-secondary text-secondary-content"}`}>
-      {!failed && <span className="loading loading-spinner loading-xs" />}
-      <span className="flex-1">{failed ? t("app.toolsFailed", { error: status!.error }) : t("app.toolsPreparing")}</span>
-      {failed && (
+  if (failed) {
+    return (
+      <div role="status" className="mx-3 mt-2 flex items-center gap-2 rounded-xl bg-error/15 px-3 py-2 text-sm text-error">
+        <span className="flex-1">{t("app.toolsFailed", { error: status!.error })}</span>
         <button className="btn btn-xs" onClick={() => api.updateTools().catch(showError)}>{t("app.retry")}</button>
-      )}
+      </div>
+    );
+  }
+  return (
+    <div role="status" aria-live="polite" className="mx-3 mt-2 rounded-xl bg-secondary px-3 py-2.5 text-secondary-content">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <span className="loading loading-spinner loading-sm" />
+        {t("app.toolsPreparing")}
+      </div>
+      <p className="mt-1 text-xs">{t("app.toolsPreparingDesc")}</p>
+      <progress className="progress progress-primary mt-2 h-1.5 w-full" aria-label={t("app.toolsPreparing")} />
     </div>
   );
 }
@@ -99,7 +109,7 @@ export default function MainWindow() {
       <header className="flex items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-2">
         <span className="font-bold tracking-tight">kiri</span>
         <span className="flex-1 truncate text-center text-xs text-fg-muted">{t("app.dropHint")}</span>
-        <button className="btn btn-ghost btn-sm" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}>⚙</button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" /></button>
       </header>
       <ToolsNotice />
       <main className="flex-1 overflow-y-auto">

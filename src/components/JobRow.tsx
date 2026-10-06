@@ -4,6 +4,7 @@ import { api } from "../lib/tauri";
 import { showError } from "../lib/toast";
 import { jobDetail } from "../lib/format";
 import type { Job } from "../lib/types";
+import { Icon } from "./Icon";
 
 export function JobRow({ job }: { job: Job }) {
   const { t } = useTranslation();
@@ -17,9 +18,9 @@ export function JobRow({ job }: { job: Job }) {
   return (
     <div className="flex items-center gap-3 border-b border-base-300 px-4 py-2.5">
       {job.thumbnail ? (
-        <img src={job.thumbnail} alt="" className="h-9 w-16 shrink-0 rounded-md object-cover" />
+        <img src={job.thumbnail} alt="" className="h-12 w-20 shrink-0 rounded-md object-cover" />
       ) : (
-        <div className="h-9 w-16 shrink-0 rounded-md bg-base-300" />
+        <div className="h-12 w-20 shrink-0 rounded-md bg-base-300" />
       )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">{job.title}</div>
@@ -34,18 +35,18 @@ export function JobRow({ job }: { job: Job }) {
       </div>
       {!running && <span className={`badge badge-sm ${badge}`}>{t(`state.${kind}`)}</span>}
       {(running || kind === "queued") && (
-        <button className="btn btn-ghost btn-xs" aria-label={t("job.stop")} title={t("job.stop")} onClick={act(() => api.stopJob(job.id))}>⏸</button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("job.stop")} title={t("job.stop")} onClick={act(() => api.stopJob(job.id))}><Icon name="pause" /></button>
       )}
       {(kind === "stopped" || kind === "failed") && (
-        <button className="btn btn-ghost btn-xs" aria-label={t("job.restart")} title={t("job.restart")} onClick={act(() => api.restartJob(job.id))}>↻</button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("job.restart")} title={t("job.restart")} onClick={act(() => api.restartJob(job.id))}><Icon name="restart" /></button>
       )}
       {job.state.kind === "failed" && job.state.message === "error.download_dir_unwritable" && (
-        <button className="btn btn-ghost btn-xs" aria-label={t("app.settings")} title={t("app.settings")} onClick={act(() => api.openSettings())}>⚙</button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={act(() => api.openSettings())}><Icon name="settings" /></button>
       )}
       {kind === "completed" && job.output && (
-        <button className="btn btn-ghost btn-xs" aria-label={t("job.reveal")} title={t("job.reveal")} onClick={act(() => revealItemInDir(job.output!))}>⌕</button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("job.reveal")} title={t("job.reveal")} onClick={act(() => revealItemInDir(job.output!))}><Icon name="reveal" /></button>
       )}
-      <button className="btn btn-ghost btn-xs" aria-label={t("job.remove")} title={t("job.remove")} onClick={act(() => api.removeJob(job.id))}>✕</button>
+      <button className="btn btn-ghost btn-sm btn-square" aria-label={t("job.remove")} title={t("job.remove")} onClick={act(() => api.removeJob(job.id))}><Icon name="remove" /></button>
     </div>
   );
 }

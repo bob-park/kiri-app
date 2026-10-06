@@ -3,8 +3,9 @@
     "dropHint": "Paste a YouTube link (⌘V) or drop it here",
     "empty": "No downloads yet",
     "settings": "Settings",
-    "toolsPreparing": "Preparing yt-dlp…",
-    "toolsFailed": "Couldn't prepare yt-dlp: {{error}}",
+    "toolsPreparing": "Getting ready to download…",
+    "toolsPreparingDesc": "Downloading the components kiri needs on first launch. This takes a moment.",
+    "toolsFailed": "Couldn't get ready to download: {{error}}",
     "retry": "Retry"
   },
   "job": {
@@ -102,7 +103,7 @@
   },
   "error": {
     "invalid_url": "That's not a YouTube link",
-    "ytdlp_missing": "yt-dlp is still being prepared",
+    "ytdlp_missing": "Still getting ready to download. Try again in a moment.",
     "not_found": "That job no longer exists",
     "not_stoppable": "That job isn't running",
     "not_restartable": "That job can't be restarted",

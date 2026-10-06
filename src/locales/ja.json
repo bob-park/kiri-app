@@ -3,8 +3,9 @@
     "dropHint": "YouTube のリンクをペースト（⌘V）またはドロップ",
     "empty": "まだダウンロードはありません",
     "settings": "設定",
-    "toolsPreparing": "yt-dlp を準備中…",
-    "toolsFailed": "yt-dlp を準備できませんでした: {{error}}",
+    "toolsPreparing": "ダウンロードの準備中…",
+    "toolsPreparingDesc": "初回起動に必要なコンポーネントをダウンロードしています。しばらくお待ちください。",
+    "toolsFailed": "ダウンロードの準備に失敗しました: {{error}}",
     "retry": "再試行"
   },
   "job": {
@@ -102,7 +103,7 @@
   },
   "error": {
     "invalid_url": "YouTube のリンクではありません",
-    "ytdlp_missing": "yt-dlp を準備中です",
+    "ytdlp_missing": "まだダウンロードの準備中です。しばらくしてからお試しください。",
     "not_found": "そのジョブはもうありません",
     "not_stoppable": "実行中のジョブではありません",
     "not_restartable": "再開できないジョブです",
