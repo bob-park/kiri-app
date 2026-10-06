@@ -1,5 +1,6 @@
 {
   "app": {
+    "clearCompleted": "完了した項目を消去",
     "dropHint": "YouTube のリンクをペースト（⌘V）またはドロップ",
     "empty": "まだダウンロードはありません",
     "settings": "設定",

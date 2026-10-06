@@ -92,6 +92,11 @@ pub fn remove_job(engine: State<'_, Engine>, id: u64) -> CmdResult<()> {
 }
 
 #[tauri::command]
+pub fn clear_completed(engine: State<'_, Engine>) -> usize {
+    engine.clear_completed()
+}
+
+#[tauri::command]
 pub fn restart_job(engine: State<'_, Engine>, id: u64) -> CmdResult<()> {
     Ok(engine.restart(id)?)
 }

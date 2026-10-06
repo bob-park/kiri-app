@@ -310,6 +310,21 @@ impl Engine {
         Ok(())
     }
 
+    /// 완료된 작업을 목록에서 한 번에 뺀다. 받은 파일은 건드리지 않는다. 뺀 개수를 돌려준다.
+    pub fn clear_completed(&self) -> usize {
+        let removed = {
+            let mut st = self.0.state.lock().unwrap();
+            let before = st.jobs.len();
+            st.jobs.retain(|j| j.state != JobState::Completed);
+            before - st.jobs.len()
+        };
+        if removed > 0 {
+            self.save();
+            self.notify();
+        }
+        removed
+    }
+
     pub fn restart(&self, id: u64) -> Result<(), EngineError> {
         {
             let mut st = self.0.state.lock().unwrap();
@@ -986,6 +1001,35 @@ mod tests {
         let j = &engine.list()[0];
         assert_eq!(j.state, JobState::Queued);
         assert_eq!((&j.output, &j.speed, &j.eta), (&None, &None, &None));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn clear_completed_removes_only_completed_and_keeps_files() {
+        let d = tempfile::tempdir().unwrap();
+        let out = d.path().join("Movies/kiri/a.mp4");
+        std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+        std::fs::write(&out, "x").unwrap();
+        let mut q = QueueState::default();
+        for t in ["a", "b", "c", "d", "e"] {
+            q.add(new_job(t), 0);
+        }
+        q.get_mut(1).unwrap().state = JobState::Completed;
+        q.get_mut(1).unwrap().output = Some(out.clone());
+        q.get_mut(2).unwrap().state = JobState::Completed;
+        q.get_mut(3).unwrap().state = JobState::Failed("x".into());
+        q.get_mut(4).unwrap().state = JobState::Stopped;
+        // 5 stays Queued
+        q.save(&d.path().join("data/queue.json")).unwrap();
+        let engine = engine_at(d.path(), "sleep 30", 1);
+        engine.0.shutting_down.store(true, Ordering::SeqCst); // pump 가 시작하지 않게
+
+        assert_eq!(engine.clear_completed(), 2);
+        let ids: Vec<u64> = engine.list().iter().map(|j| j.id).collect();
+        assert_eq!(ids, vec![3, 4, 5]);
+        assert!(out.exists(), "downloaded file must stay");
+        let saved = QueueState::load(&d.path().join("data/queue.json"));
+        assert_eq!(saved.jobs.len(), 3, "persisted");
+        assert_eq!(engine.clear_completed(), 0);
     }
 
     #[tokio::test(flavor = "multi_thread")]

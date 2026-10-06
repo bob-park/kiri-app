@@ -11,6 +11,7 @@ export const api = {
   stopJob: (id: number) => invoke<void>("stop_job", { id }),
   removeJob: (id: number) => invoke<void>("remove_job", { id }),
   restartJob: (id: number) => invoke<void>("restart_job", { id }),
+  clearCompleted: () => invoke<number>("clear_completed"),
   toolsStatus: () => invoke<ToolsStatus>("tools_status"),
   updateTools: () => invoke<void>("update_tools"),
   openSettings: () => invoke<void>("open_settings"),

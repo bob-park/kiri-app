@@ -1,5 +1,6 @@
 {
   "app": {
+    "clearCompleted": "완료 항목 정리",
     "dropHint": "YouTube 링크를 붙여넣거나(⌘V) 끌어다 놓으세요",
     "empty": "아직 다운로드가 없습니다",
     "settings": "설정",

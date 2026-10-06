@@ -110,6 +110,9 @@ export default function MainWindow() {
       <header className="flex items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-2">
         <span className="font-bold tracking-tight">kiri</span>
         <span className="flex-1 truncate text-center text-xs text-fg-muted">{t("app.dropHint")}</span>
+        {jobs.some((j) => j.state.kind === "completed") && (
+          <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.clearCompleted")} title={t("app.clearCompleted")} onClick={() => api.clearCompleted().catch(showError)}><Icon name="clear" /></button>
+        )}
         <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" /></button>
       </header>
       <UpdateBanner />

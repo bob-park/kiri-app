@@ -87,6 +87,7 @@ pub fn run() {
             commands::stop_job,
             commands::remove_job,
             commands::restart_job,
+            commands::clear_completed,
             commands::tools_status,
             commands::update_tools,
             commands::update_status,

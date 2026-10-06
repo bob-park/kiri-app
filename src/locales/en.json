@@ -1,5 +1,6 @@
 {
   "app": {
+    "clearCompleted": "Clear completed",
     "dropHint": "Paste a YouTube link (⌘V) or drop it here",
     "empty": "No downloads yet",
     "settings": "Settings",

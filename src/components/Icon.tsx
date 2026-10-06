@@ -1,4 +1,12 @@
 const paths = {
+  clear: (
+    <>
+      <path d="M4 6h10" />
+      <path d="M4 12h10" />
+      <path d="M4 18h6" />
+      <path d="m14 17 2.5 2.5L21 15" />
+    </>
+  ),
   pause: (
     <>
       <path d="M8 5v14" />
