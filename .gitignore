@@ -75,3 +75,9 @@ src-tauri/gen/
 .DS_Store
 
 *.dll
+# kiri
+node_modules/
+dist/
+.yarn/
+src-tauri/binaries/
+src-tauri/gen/
