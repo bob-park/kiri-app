@@ -9,8 +9,11 @@ use crate::{
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
@@ -89,6 +92,8 @@ struct Inner {
     /// 스냅샷 생성과 리스너 호출을 묶어 직렬화한다. 이게 없으면 늦게 만든
     /// 스냅샷이 먼저 나가서 UI 가 낡은 상태에 멈춘다.
     notify_lock: Mutex<()>,
+    /// 앱 종료 중. 더 이상 작업을 시작하지 않는다.
+    shutting_down: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -116,6 +121,7 @@ impl Engine {
             rt,
             listener: Box::new(listener),
             notify_lock: Mutex::new(()),
+            shutting_down: AtomicBool::new(false),
         }));
         engine.save();
         engine
@@ -296,6 +302,31 @@ impl Engine {
         Ok(())
     }
 
+    /// 앱 종료 직전. 실행 중인 작업을 대기로 되돌리고(다음 실행 때 이어 받음) 자식
+    /// 프로세스를 취소한 뒤 `timeout` 까지 정리를 기다린다. 이후로는 작업을 시작하지 않는다.
+    /// 블로킹 호출이다.
+    pub fn shutdown_for_exit(&self, timeout: Duration) {
+        self.0.shutting_down.store(true, Ordering::SeqCst);
+        {
+            let mut st = self.0.state.lock().unwrap();
+            for job in st.jobs.iter_mut().filter(|j| j.state.is_active()) {
+                job.state = JobState::Queued;
+                job.progress = 0.0;
+                job.speed = None;
+                job.eta = None;
+            }
+        }
+        self.save(); // 기다리는 도중 강제 종료돼도 대기 상태로 남게 먼저 저장한다
+        for token in self.0.running.lock().unwrap().values() {
+            token.cancel();
+        }
+        let deadline = Instant::now() + timeout;
+        while !self.0.running.lock().unwrap().is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        self.save();
+    }
+
     fn job_dir(&self, id: u64) -> PathBuf {
         self.0.paths.cache_dir.join("jobs").join(id.to_string())
     }
@@ -318,6 +349,9 @@ impl Engine {
     /// 빈 슬롯만큼 대기 작업을 시작한다.
     fn pump(&self) {
         loop {
+            if self.0.shutting_down.load(Ordering::SeqCst) {
+                return;
+            }
             let max = self.config().max_concurrent.max(1);
             let next = {
                 let mut running = self.0.running.lock().unwrap();
@@ -727,6 +761,25 @@ mod tests {
         for j in e.engine.list() {
             let _ = e.engine.stop(j.id);
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shutdown_for_exit_requeues_and_waits_for_children() {
+        let e = env("sleep 30", 2);
+        e.engine.add(new_job("a"));
+        wait_for(&e.engine, |_| e.engine.has_active()).await;
+        let engine = e.engine.clone();
+        tokio::task::spawn_blocking(move || engine.shutdown_for_exit(Duration::from_secs(2)))
+            .await
+            .unwrap();
+        assert!(e.engine.0.running.lock().unwrap().is_empty());
+        assert_eq!(state_of(&e.engine, 1), JobState::Queued);
+        // 취소된 작업이 끝나면서 pump 가 다시 시작하지 않아야 한다.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(e.engine.0.running.lock().unwrap().is_empty());
+        assert_eq!(state_of(&e.engine, 1), JobState::Queued);
+        let saved = QueueState::load(&e.d.path().join("data/queue.json"));
+        assert_eq!(saved.jobs[0].state, JobState::Queued);
     }
 
     #[tokio::test(flavor = "multi_thread")]
