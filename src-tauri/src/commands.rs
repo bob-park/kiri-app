@@ -31,7 +31,7 @@ impl From<EngineError> for CmdError {
 impl From<String> for CmdError {
     fn from(message: String) -> Self {
         Self {
-            code: "unknown".into(),
+            code: "failed".into(),
             message,
         }
     }
