@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/tauri";
 import { useSettings } from "../lib/settings";
@@ -38,11 +38,21 @@ export function OptionsSheet({ url, info, onClose }: Props) {
     setSubs(defaultSubtitles(info, defaults.subtitles));
   }, [info]);
 
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const downloadRef = useRef<HTMLButtonElement>(null);
+  const composing = useRef(false);
+
+  // 모달로 열어 포커스를 가두고, 닫히면(언마운트) 원래 포커스로 돌려준다.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    const dialog = dialogRef.current!;
+    const prev = document.activeElement as HTMLElement | null;
+    dialog.showModal();
+    (downloadRef.current ?? dialog).focus();
+    return () => {
+      dialog.close();
+      prev?.focus();
+    };
+  }, []);
 
   const toggleSub = (l: string) => setSubs((s) => (s.includes(l) ? s.filter((x) => x !== l) : [...s, l]));
   const autoOnly = info ? info.auto_subtitles.filter((l) => !info.subtitles.includes(l)) : [];
@@ -52,13 +62,14 @@ export function OptionsSheet({ url, info, onClose }: Props) {
     setBusy(true);
     try {
       await api.addJob(buildNewJob(url, info, quality, preset, subs));
-      if (remember) await useSettings.getState().update(rememberPatch(quality, preset, subs));
-      onClose();
     } catch (e) {
       showError(e);
-    } finally {
       setBusy(false);
+      return;
     }
+    // 작업은 이미 큐에 들어갔으니 설정 저장이 실패해도 시트를 닫는다(중복 추가 방지).
+    if (remember) await useSettings.getState().update(rememberPatch(quality, preset, subs)).catch(showError);
+    onClose();
   };
 
   const qualityRow = (q: Quality | null) => {
@@ -87,14 +98,20 @@ export function OptionsSheet({ url, info, onClose }: Props) {
   );
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-center bg-black/30" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={info?.title ?? t("sheet.loading")}
-        className="h-fit max-h-[88vh] w-[min(520px,94vw)] overflow-y-auto rounded-b-2xl bg-base-100 p-4 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <dialog
+      ref={dialogRef}
+      tabIndex={-1}
+      aria-label={info?.title ?? t("sheet.loading")}
+      className="mx-auto mt-0 h-fit max-h-[88vh] w-[min(520px,94vw)] max-w-none overflow-y-auto rounded-b-2xl bg-base-100 p-0 text-base-content shadow-xl outline-none backdrop:bg-black/30"
+      onCompositionStart={() => (composing.current = true)}
+      onCompositionEnd={() => (composing.current = false)}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!composing.current) onClose();
+      }}
+      onClick={(e) => e.target === dialogRef.current && onClose()}
+    >
+      <div className="p-4">
         {!info ? (
           <div className="flex items-center gap-3 py-6 text-sm">
             <span className="loading loading-spinner loading-sm" />
@@ -141,11 +158,11 @@ export function OptionsSheet({ url, info, onClose }: Props) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button className="btn btn-outline btn-sm" onClick={onClose}>{t("sheet.cancel")}</button>
-              <button className="btn btn-primary btn-sm" onClick={confirm} disabled={busy}>{t("sheet.download")}</button>
+              <button ref={downloadRef} autoFocus className="btn btn-primary btn-sm" onClick={confirm} disabled={busy}>{t("sheet.download")}</button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }
