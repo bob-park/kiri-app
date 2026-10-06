@@ -1,0 +1,112 @@
+<style>
+  .k { font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; color:#101114; background:#fff; border-radius:12px; overflow:hidden; font-size:13px; box-shadow: rgba(0,0,0,0.06) 0 4px 24px; border:1px solid #dedee5; position:relative; }
+  .k * { box-sizing:border-box; }
+  .k .bar { height:30px; background:#f6f6f9; border-bottom:1px solid #dedee5; display:flex; align-items:center; gap:6px; padding:0 10px; }
+  .k .dot { width:10px; height:10px; border-radius:50%; background:#dedee5; }
+  .k .btn { background:#7132f5; color:#fff; border-radius:12px; padding:6px 12px; font-weight:600; font-size:12px; display:inline-block; }
+  .k .btn-out { background:#fff; color:#5741d8; border:1px solid #5741d8; border-radius:12px; padding:5px 11px; font-weight:600; font-size:12px; display:inline-block; }
+  .k .btn-gray { background:rgba(148,151,169,0.12); color:#101114; border-radius:10px; padding:4px 8px; font-size:11px; display:inline-block; }
+  .k .muted { color:#9497a9; font-size:11px; }
+  .k .badge-ok { background:rgba(20,158,97,0.16); color:#026b3f; border-radius:6px; padding:1px 6px; font-size:10px; font-weight:600; }
+  .k .badge { background:rgba(104,107,130,0.12); color:#484b5e; border-radius:8px; padding:1px 6px; font-size:10px; font-weight:600; }
+  .k .thumb { width:64px; height:36px; border-radius:6px; background:linear-gradient(135deg,#5741d8,#9497a9); flex-shrink:0; }
+  .k .prog { height:4px; background:#ececf2; border-radius:9999px; overflow:hidden; margin-top:5px; }
+  .k .prog > i { display:block; height:100%; background:#7132f5; }
+  .k .row { display:flex; gap:10px; align-items:center; padding:9px 12px; border-bottom:1px solid #f0f0f4; }
+  .k .title { font-weight:600; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .k .grow { flex:1; min-width:0; }
+  .k .lbl { font-size:10px; color:#9497a9; text-transform:uppercase; letter-spacing:.4px; margin:9px 0 4px; }
+  .k .sel { border:1px solid #dedee5; border-radius:8px; padding:5px 8px; font-size:11px; display:flex; justify-content:space-between; background:#fff; }
+  .k .q { border:1px solid #dedee5; border-radius:8px; padding:5px 8px; font-size:11px; display:flex; justify-content:space-between; margin-bottom:3px; }
+  .k .q.on { border-color:#7132f5; background:rgba(133,91,251,0.08); font-weight:600; color:#5b1ecf; }
+  .k .chk { display:inline-block; width:11px; height:11px; border-radius:3px; border:1px solid #9497a9; vertical-align:-1px; margin-right:4px; }
+  .k .chk.on { background:#7132f5; border-color:#7132f5; }
+  .k .dim { position:absolute; inset:30px 0 0 0; background:rgba(16,17,20,0.25); }
+  .k .sheet { position:absolute; left:50%; top:30px; transform:translateX(-50%); width:82%; background:#fff; border-radius:0 0 14px 14px; box-shadow:rgba(0,0,0,0.18) 0 10px 30px; padding:12px 14px; }
+  .k .pop { position:absolute; right:14px; top:76px; width:190px; background:#fff; border:1px solid #dedee5; border-radius:12px; box-shadow:rgba(0,0,0,0.12) 0 8px 24px; padding:10px; }
+  .k .toast { margin:8px 12px; background:#101114; color:#fff; border-radius:10px; padding:6px 10px; font-size:11px; display:flex; justify-content:space-between; }
+  .k .exp { background:rgba(133,91,251,0.05); border-left:3px solid #7132f5; padding:10px 12px 12px; border-bottom:1px solid #f0f0f4; }
+</style>
+
+<h2>붙여넣기(⌘V) 이후 흐름: 화질/포맷/자막은 언제 고를까요?</h2>
+<p class="subtitle">세 가지 모두 A 레이아웃이고 URL 입력창이 없습니다. 창 어디서든 ⌘V(또는 링크 드래그)로 추가합니다.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="sheet" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f3f3f7;">
+      <div class="k" style="height:300px;">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="flex:1;text-align:center;font-weight:600;font-size:12px;">kiri</span></div>
+        <div class="row"><div class="thumb"></div><div class="grow"><div class="title">Tauri 2.0 Deep Dive</div><div class="prog"><i style="width:60%"></i></div></div></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div style="display:flex;gap:10px;align-items:center;">
+            <div class="thumb"></div><div class="grow"><div class="title">Rust in 100 Seconds</div><div class="muted">Fireship · 2:24</div></div>
+          </div>
+          <div class="lbl">화질 (YouTube 제공)</div>
+          <div class="q on"><span>1080p60 · VP9</span><span>88 MB</span></div>
+          <div class="q"><span>720p60 · AVC</span><span>41 MB</span></div>
+          <div class="q"><span>오디오만 · Opus</span><span>3 MB</span></div>
+          <div style="display:flex;gap:8px;">
+            <div class="grow"><div class="lbl">출력 포맷</div><div class="sel"><span>원본 유지</span><span>▾</span></div></div>
+            <div class="grow"><div class="lbl">자막</div><div class="sel"><span>ko, en</span><span>▾</span></div></div>
+          </div>
+          <div style="margin-top:6px;font-size:11px;"><span class="chk on"></span>다음부터 이 설정으로 바로 시작</div>
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;"><span class="btn-out">취소</span><span class="btn">다운로드</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>1. 매번 시트로 선택</h3>
+      <p>붙여넣으면 메타데이터를 읽어 시트를 띄웁니다. 실제 제공 화질과 용량을 보고 고른 뒤 시작합니다. "다음부터 바로 시작"을 켜면 이후에는 시트를 건너뜁니다.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="instant" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f3f3f7;">
+      <div class="k" style="height:300px;">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="flex:1;text-align:center;font-weight:600;font-size:12px;">kiri</span><span class="btn-gray">기본: 최고화질 · MP4 · 자막 ko</span></div>
+        <div class="row"><div class="thumb"></div><div class="grow"><div class="title">Rust in 100 Seconds</div><div class="muted">1080p60 · MP4 · 자막 ko · 12%</div><div class="prog"><i style="width:12%"></i></div></div><span class="btn-gray" style="background:rgba(133,91,251,0.16);color:#5b1ecf;">⋯</span></div>
+        <div class="row"><div class="thumb" style="background:linear-gradient(135deg,#149e61,#9497a9)"></div><div class="grow"><div class="title">Tauri 2.0 Deep Dive</div><div class="prog"><i style="width:60%"></i></div></div><span class="btn-gray">⋯</span></div>
+        <div class="pop">
+          <div style="font-weight:600;font-size:12px;">이 작업 설정 변경</div>
+          <div class="lbl">화질</div><div class="sel"><span>1080p60</span><span>▾</span></div>
+          <div class="lbl">출력 포맷</div><div class="sel"><span>MP4 · H.264</span><span>▾</span></div>
+          <div class="lbl">자막</div><div class="sel"><span>ko</span><span>▾</span></div>
+          <div class="muted" style="margin-top:6px;">변경하면 처음부터 다시 받습니다</div>
+        </div>
+        <div class="toast" style="position:absolute;bottom:4px;left:0;right:0;"><span>✓ 추가됨: Rust in 100 Seconds</span><span style="color:#b9a6fb">설정 변경</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>2. 즉시 시작 + 나중에 변경 (Downie 기본 동작)</h3>
+      <p>붙여넣는 즉시 기본 프리셋(설정에서 지정)으로 다운로드를 시작합니다. 바꾸고 싶으면 행의 ⋯ 팝오버에서 고치고, 그러면 작업이 재시작됩니다. 가장 빠르지만 실제 화질 목록은 시작 후에야 보입니다.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="inline" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f3f3f7;">
+      <div class="k" style="height:300px;">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="flex:1;text-align:center;font-weight:600;font-size:12px;">kiri</span></div>
+        <div class="exp">
+          <div style="display:flex;gap:10px;align-items:center;">
+            <div class="thumb"></div><div class="grow"><div class="title">Rust in 100 Seconds</div><div class="muted">Fireship · 2:24 · 설정 대기</div></div><span class="badge">준비</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px;">
+            <div class="grow"><div class="lbl">화질</div><div class="sel"><span>1080p60</span><span>▾</span></div></div>
+            <div class="grow"><div class="lbl">포맷</div><div class="sel"><span>원본</span><span>▾</span></div></div>
+            <div class="grow"><div class="lbl">자막</div><div class="sel"><span>없음</span><span>▾</span></div></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;"><span class="btn-out">제거</span><span class="btn">시작</span></div>
+        </div>
+        <div class="row"><div class="thumb" style="background:linear-gradient(135deg,#149e61,#9497a9)"></div><div class="grow"><div class="title">Tauri 2.0 Deep Dive</div><div class="prog"><i style="width:60%"></i></div></div></div>
+        <div class="row"><div class="thumb" style="background:#dedee5"></div><div class="grow"><div class="title">Podcast #12</div><div class="muted">완료 · 720p</div></div><span class="badge-ok">완료</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>3. 리스트 안에서 펼쳐서 선택</h3>
+      <p>붙여넣으면 "준비" 상태의 행이 펼쳐진 채로 추가되고, 그 자리에서 고른 뒤 시작합니다. 모달이 없어서 여러 링크를 연달아 붙여넣고 하나씩 설정하기 좋습니다.</p>
+    </div>
+  </div>
+
+</div>

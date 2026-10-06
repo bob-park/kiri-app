@@ -1,0 +1,149 @@
+<style>
+  .k { font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; color:#101114; background:#fff; border-radius:12px; overflow:hidden; font-size:13px; box-shadow: rgba(0,0,0,0.06) 0 4px 24px; border:1px solid #dedee5; }
+  .k * { box-sizing:border-box; }
+  .k .bar { height:30px; background:#f6f6f9; border-bottom:1px solid #dedee5; display:flex; align-items:center; gap:6px; padding:0 10px; }
+  .k .dot { width:10px; height:10px; border-radius:50%; background:#dedee5; }
+  .k .btn { background:#7132f5; color:#fff; border-radius:12px; padding:7px 12px; font-weight:600; font-size:12px; display:inline-block; white-space:nowrap; }
+  .k .btn-sub { background:rgba(133,91,251,0.16); color:#7132f5; border-radius:12px; padding:5px 9px; font-weight:600; font-size:11px; display:inline-block; }
+  .k .btn-gray { background:rgba(148,151,169,0.12); color:#101114; border-radius:10px; padding:4px 8px; font-size:11px; display:inline-block; }
+  .k .input { flex:1; border:1px solid #dedee5; border-radius:12px; padding:7px 10px; color:#9497a9; font-size:12px; background:#fff; }
+  .k .muted { color:#9497a9; font-size:11px; }
+  .k .badge-ok { background:rgba(20,158,97,0.16); color:#026b3f; border-radius:6px; padding:1px 6px; font-size:10px; font-weight:600; }
+  .k .badge { background:rgba(104,107,130,0.12); color:#484b5e; border-radius:8px; padding:1px 6px; font-size:10px; font-weight:600; }
+  .k .badge-p { background:rgba(133,91,251,0.16); color:#5b1ecf; border-radius:8px; padding:1px 6px; font-size:10px; font-weight:600; }
+  .k .thumb { width:64px; height:36px; border-radius:6px; background:linear-gradient(135deg,#5741d8,#9497a9); flex-shrink:0; }
+  .k .prog { height:4px; background:#ececf2; border-radius:9999px; overflow:hidden; margin-top:5px; }
+  .k .prog > i { display:block; height:100%; background:#7132f5; border-radius:9999px; }
+  .k .row { display:flex; gap:10px; align-items:center; padding:9px 12px; border-bottom:1px solid #f0f0f4; }
+  .k .title { font-weight:600; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .k .grow { flex:1; min-width:0; }
+  .k .side { width:120px; background:#f8f8fb; border-right:1px solid #dedee5; padding:10px 8px; }
+  .k .nav { padding:6px 8px; border-radius:8px; font-size:12px; color:#484b5e; margin-bottom:2px; }
+  .k .nav.on { background:rgba(133,91,251,0.16); color:#5b1ecf; font-weight:600; }
+  .k .sec { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:#9497a9; padding:8px 8px 4px; }
+  .k .drop { margin:12px; border:1.5px dashed #b9a6fb; border-radius:16px; padding:16px; text-align:center; background:rgba(133,91,251,0.05); }
+  .k .card { border:1px solid #dedee5; border-radius:12px; padding:8px; display:flex; gap:8px; align-items:center; margin:0 12px 8px; }
+  .k .insp { width:170px; border-left:1px solid #dedee5; padding:12px; background:#fcfcfe; }
+  .k .lbl { font-size:10px; color:#9497a9; text-transform:uppercase; letter-spacing:.4px; margin:8px 0 3px; }
+  .k .sel { border:1px solid #dedee5; border-radius:8px; padding:4px 7px; font-size:11px; display:flex; justify-content:space-between; }
+</style>
+
+<h2>메인 창 레이아웃: 어느 구조가 맞을까요?</h2>
+<p class="subtitle">세 가지 모두 Kraken 디자인 시스템(보라 #7132f5, 12px radius) 기준입니다. 원하는 쪽을 클릭해 주세요. 섞고 싶은 부분은 터미널에 말씀해 주시면 됩니다.</p>
+
+<div class="cards">
+
+  <!-- A: Downie-style -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px; background:#f3f3f7;">
+      <div class="k">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span style="flex:1;text-align:center;font-weight:600;font-size:12px;">kiri</span>
+          <span class="btn-gray">✦ AI</span><span class="btn-gray">⚙</span></div>
+        <div style="display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid #dedee5;">
+          <div class="input">YouTube 링크 붙여넣기 (⌘V)</div><span class="btn">다운로드</span>
+        </div>
+        <div class="row"><div class="thumb"></div><div class="grow">
+          <div class="title">Rust in 100 Seconds</div>
+          <div class="muted">1080p · MP4(H.264) · 자막 ko · 42.1 / 88.0 MB</div>
+          <div class="prog"><i style="width:48%"></i></div></div>
+          <span class="btn-gray">⏸</span><span class="btn-gray">✕</span></div>
+        <div class="row"><div class="thumb" style="background:linear-gradient(135deg,#149e61,#9497a9)"></div><div class="grow">
+          <div class="title">Tauri 2.0 Deep Dive</div>
+          <div class="muted">ffmpeg 인코딩 중 · HEVC → MOV</div>
+          <div class="prog"><i style="width:72%;background:#5741d8"></i></div></div>
+          <span class="btn-gray">⏸</span><span class="btn-gray">✕</span></div>
+        <div class="row"><div class="thumb" style="background:#dedee5"></div><div class="grow">
+          <div class="title">WWDC Keynote</div><div class="muted">대기 중 · 4K · WebM</div></div>
+          <span class="badge">대기</span></div>
+        <div class="row" style="border:none"><div class="thumb" style="background:#dedee5"></div><div class="grow">
+          <div class="title">Podcast #12</div><div class="muted">완료 · 720p · MP4</div></div>
+          <span class="badge-ok">완료</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Downie 스타일 단일 리스트</h3>
+      <p>상단 붙여넣기 바와 큐 리스트만 있는 창. 화질/자막 선택은 붙여넣기 직후 시트(모달)로 뜹니다. AI와 설정은 툴바 버튼에서 별도 창으로 엽니다. 가장 단순하고 Downie에 가장 가깝습니다.</p>
+    </div>
+  </div>
+
+  <!-- B: Sidebar -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px; background:#f3f3f7;">
+      <div class="k">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div style="display:flex;min-height:250px;">
+          <div class="side">
+            <div style="font-weight:700;font-size:14px;padding:2px 8px 8px;letter-spacing:-.3px;">kiri</div>
+            <div class="sec">작업</div>
+            <div class="nav on">⬇ 다운로드 <span class="badge-p" style="float:right">3</span></div>
+            <div class="nav">✦ AI 요약</div>
+            <div class="nav">✓ 완료됨</div>
+            <div class="sec">관리</div>
+            <div class="nav">◎ 모델</div>
+            <div class="nav">⚙ 설정</div>
+          </div>
+          <div class="grow">
+            <div style="display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid #dedee5;">
+              <div class="input">YouTube 링크 붙여넣기</div><span class="btn">추가</span>
+            </div>
+            <div class="row"><div class="thumb"></div><div class="grow">
+              <div class="title">Rust in 100 Seconds</div>
+              <div class="muted">1080p · MP4 · 다운로드 48%</div>
+              <div class="prog"><i style="width:48%"></i></div></div></div>
+            <div class="row"><div class="thumb" style="background:linear-gradient(135deg,#149e61,#9497a9)"></div><div class="grow">
+              <div class="title">Tauri 2.0 Deep Dive</div>
+              <div class="muted">인코딩 72% · HEVC</div>
+              <div class="prog"><i style="width:72%;background:#5741d8"></i></div></div></div>
+            <div class="row" style="border:none"><div class="thumb" style="background:#dedee5"></div><div class="grow">
+              <div class="title">WWDC Keynote</div><div class="muted">대기 중 · 4K</div></div><span class="badge">대기</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 사이드바 내비게이션</h3>
+      <p>왼쪽 사이드바에서 다운로드 / AI 요약 / 완료됨 / 모델 / 설정을 전환합니다. 나중에 AI 기능이 붙을 자리가 처음부터 마련되어 있습니다. 화질 선택은 A와 같이 시트로 뜹니다.</p>
+    </div>
+  </div>
+
+  <!-- C: Drop zone + inspector -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px; background:#f3f3f7;">
+      <div class="k">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span style="flex:1;text-align:center;font-weight:600;font-size:12px;">kiri</span></div>
+        <div style="display:flex;min-height:250px;">
+          <div class="grow">
+            <div class="drop">
+              <div style="font-weight:700;font-size:14px;letter-spacing:-.3px;">링크를 붙여넣거나 끌어다 놓으세요</div>
+              <div class="muted" style="margin-top:3px;">⌘V · youtube.com / youtu.be</div>
+            </div>
+            <div class="card" style="border-color:#7132f5;background:rgba(133,91,251,0.05)"><div class="thumb"></div><div class="grow">
+              <div class="title">Rust in 100 Seconds</div>
+              <div class="prog"><i style="width:48%"></i></div></div></div>
+            <div class="card"><div class="thumb" style="background:linear-gradient(135deg,#149e61,#9497a9)"></div><div class="grow">
+              <div class="title">Tauri 2.0 Deep Dive</div>
+              <div class="prog"><i style="width:72%;background:#5741d8"></i></div></div></div>
+            <div class="card"><div class="thumb" style="background:#dedee5"></div><div class="grow">
+              <div class="title">WWDC Keynote</div><div class="muted">대기 중</div></div></div>
+          </div>
+          <div class="insp">
+            <div style="font-weight:600;font-size:12px;">선택한 작업</div>
+            <div class="lbl">화질</div><div class="sel"><span>1080p60</span><span>▾</span></div>
+            <div class="lbl">출력 포맷</div><div class="sel"><span>MP4 · H.264</span><span>▾</span></div>
+            <div class="lbl">자막</div><div class="sel"><span>ko, en</span><span>▾</span></div>
+            <div class="lbl">상태</div><div class="muted">다운로드 48% · 2.1 MB/s</div>
+            <div style="margin-top:10px;display:flex;gap:4px;"><span class="btn-sub">중지</span><span class="btn-sub">삭제</span></div>
+            <div style="margin-top:6px;"><span class="btn-sub">✦ AI 요약</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 드롭존 + 인스펙터 패널</h3>
+      <p>큰 드롭존 아래에 카드형 큐가 있고, 오른쪽 인스펙터에서 선택한 작업의 화질/포맷/자막을 바로 바꾸거나 AI 요약을 시작합니다. 모달이 없고 한 화면에서 모두 처리합니다.</p>
+    </div>
+  </div>
+
+</div>
