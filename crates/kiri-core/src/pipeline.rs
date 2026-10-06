@@ -189,6 +189,7 @@ async fn encode_once(
 }
 
 /// 결과물과 자막을 저장 위치로 옮긴다. 같은 이름이 있으면 " (n)" 을 붙인다.
+/// 자막은 플레이어가 파일 이름(stem)으로 짝을 찾으므로 최종 미디어 이름을 따라간다.
 fn finalize(cfg: &PipelineCfg, media: &Path) -> Result<PathBuf, PipelineError> {
     let name = media
         .file_name()
@@ -196,9 +197,19 @@ fn finalize(cfg: &PipelineCfg, media: &Path) -> Result<PathBuf, PipelineError> {
         .unwrap_or("video");
     let dest = files::unique_path(&cfg.download_dir, name);
     files::move_file(media, &dest).map_err(io_fail)?;
+    // 자막은 `<원본 stem>.<lang>.srt`. 인코딩 결과도 stem 은 그대로이므로 media 에서 얻는다.
+    let stem = media
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let dest_stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or(stem);
     for srt in files::subtitle_files(&cfg.work_dir).unwrap_or_default() {
         if let Some(n) = srt.file_name().and_then(|n| n.to_str()) {
-            let _ = files::move_file(&srt, &files::unique_path(&cfg.download_dir, n));
+            let renamed = n
+                .strip_prefix(stem)
+                .filter(|_| !stem.is_empty())
+                .map_or_else(|| n.to_string(), |rest| format!("{dest_stem}{rest}"));
+            let _ = files::move_file(&srt, &files::unique_path(&cfg.download_dir, &renamed));
         }
     }
     Ok(dest)
@@ -330,6 +341,9 @@ mod tests {
             fs::read_to_string(e.cfg.download_dir.join("Fake Video.mp4")).unwrap(),
             "old"
         );
+        // 자막 이름은 최종 미디어 이름을 따라가야 한다 (플레이어가 stem 으로 짝을 찾는다).
+        assert!(e.cfg.download_dir.join("Fake Video (1).ko.srt").exists());
+        assert!(!e.cfg.download_dir.join("Fake Video.ko.srt").exists());
     }
 
     #[tokio::test]
