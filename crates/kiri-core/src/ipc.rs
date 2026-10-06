@@ -73,6 +73,8 @@ pub fn socket_path() -> PathBuf {
 }
 
 /// 다른 인스턴스가 응답하면 AddrInUse. 응답 없는 파일은 지우고 다시 바인드한다.
+/// ponytail: connect 성공을 생존 신호로 쓴다. 죽은 직후의 소켓 fd 사본을 fork 중인
+/// 자식이 exec 전까지 들고 있는 찰나에는 살아 있어 보인다 — 다음 실행에서 풀린다.
 pub async fn bind(path: &Path) -> io::Result<UnixListener> {
     if UnixStream::connect(path).await.is_ok() {
         return Err(io::Error::new(
@@ -199,6 +201,7 @@ mod tests {
         model::{Preset, Tools},
     };
     use serde_json::json;
+    use std::os::unix::fs::FileTypeExt;
 
     fn idle_engine(dir: &Path) -> Engine {
         let tools = Tools {
@@ -319,8 +322,13 @@ mod tests {
     async fn bind_replaces_stale_socket_file() {
         let d = tempfile::tempdir().unwrap();
         let path = d.path().join("kiri.sock");
-        drop(std::os::unix::net::UnixListener::bind(&path).unwrap()); // 파일만 남는다
-        assert!(bind(&path).await.is_ok());
+        // 여기서 리스너를 bind 했다 drop 하면 안 된다: 같은 프로세스의 다른 테스트가
+        // 그 사이 fork 하면 자식이 fd 사본을 들고(CLOEXEC 은 exec 때 닫는다) 닫은
+        // 소켓을 잠시 살려 둬, bind 의 connect 탐색이 "다른 인스턴스가 있다"로 본다.
+        // 전제는 "서버 없는 파일"이므로 파일만 만든다.
+        std::fs::write(&path, b"").unwrap();
+        bind(&path).await.unwrap();
+        assert!(std::fs::metadata(&path).unwrap().file_type().is_socket());
     }
 
     #[tokio::test]
