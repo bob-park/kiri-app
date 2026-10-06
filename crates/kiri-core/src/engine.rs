@@ -192,16 +192,20 @@ impl Engine {
         ytdlp::parse_probe(&out).map_err(EngineError::Probe)
     }
 
-    pub fn add(&self, new: NewJob) -> Job {
+    pub fn add(&self, new: NewJob) -> Result<Job, EngineError> {
+        if !ytdlp::is_youtube_url(&new.url) {
+            return Err(EngineError::InvalidUrl);
+        }
         let job = self.0.state.lock().unwrap().add(new, now_ms());
         self.save();
         self.notify();
         self.pump();
         // pump 가 같은 호출 안에서 Downloading 으로 바꿨을 수 있다. 최신 상태를 돌려준다.
-        self.list()
+        Ok(self
+            .list()
             .into_iter()
             .find(|j| j.id == job.id)
-            .unwrap_or(job)
+            .unwrap_or(job))
     }
 
     /// CLI 경로: probe → 화질/프리셋/자막 해석 → add. 생략한 옵션은 설정 기본값.
@@ -235,7 +239,7 @@ impl Engine {
         };
         let langs = subs.unwrap_or(cfg.default_subtitles);
         let (subtitles, auto_subtitles) = ytdlp::pick_subtitles(&info, &langs);
-        Ok(self.add(NewJob {
+        self.add(NewJob {
             url: url.trim().to_string(),
             title: info.title,
             thumbnail: info.thumbnail,
@@ -249,7 +253,7 @@ impl Engine {
                 subtitles,
                 auto_subtitles,
             },
-        }))
+        })
     }
 
     pub fn stop(&self, id: u64) -> Result<(), EngineError> {
@@ -572,7 +576,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn added_job_runs_to_completion() {
         let e = env(FAKE_YTDLP_DOWNLOAD, 2);
-        let job = e.engine.add(new_job("a"));
+        let job = e.engine.add(new_job("a")).unwrap();
         wait_for(&e.engine, |j| j[0].state == JobState::Completed).await;
         let done = &e.engine.list()[0];
         assert_eq!(done.id, job.id);
@@ -589,8 +593,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn respects_max_concurrent() {
         let e = env(&format!("{SLOW_DOWNLOAD}{FAKE_YTDLP_DOWNLOAD}"), 1);
-        e.engine.add(new_job("a"));
-        e.engine.add(new_job("b"));
+        e.engine.add(new_job("a")).unwrap();
+        e.engine.add(new_job("b")).unwrap();
         assert_eq!(state_of(&e.engine, 1), JobState::Downloading);
         assert_eq!(state_of(&e.engine, 2), JobState::Queued);
         wait_for(&e.engine, |j| {
@@ -619,8 +623,8 @@ mod tests {
             counter.fetch_sub(1, SeqCst);
         });
         engine.start();
-        engine.add(new_job("a"));
-        engine.add(new_job("b"));
+        engine.add(new_job("a")).unwrap();
+        engine.add(new_job("b")).unwrap();
         wait_for(&engine, |j| {
             j.len() == 2 && j.iter().all(|j| j.state == JobState::Completed)
         })
@@ -643,7 +647,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn stop_running_job() {
         let e = env("sleep 30", 2);
-        e.engine.add(new_job("a"));
+        e.engine.add(new_job("a")).unwrap();
         e.engine.stop(1).unwrap();
         assert_eq!(state_of(&e.engine, 1), JobState::Stopped);
         wait_for(&e.engine, |_| !e.engine.has_active()).await;
@@ -653,8 +657,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn stop_queued_job_and_reject_finished() {
         let e = env("sleep 30", 1);
-        e.engine.add(new_job("a"));
-        e.engine.add(new_job("b"));
+        e.engine.add(new_job("a")).unwrap();
+        e.engine.add(new_job("b")).unwrap();
         e.engine.stop(2).unwrap();
         assert_eq!(state_of(&e.engine, 2), JobState::Stopped);
         assert!(matches!(
@@ -668,7 +672,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn stop_then_immediate_restart_completes_once() {
         let e = env(&format!("{SLOW_DOWNLOAD}{FAKE_YTDLP_DOWNLOAD}"), 2);
-        e.engine.add(new_job("a"));
+        e.engine.add(new_job("a")).unwrap();
         e.engine.stop(1).unwrap();
         e.engine.restart(1).unwrap(); // 이전 프로세스가 아직 종료 중일 수 있다
         wait_for(&e.engine, |j| j[0].state == JobState::Completed).await;
@@ -694,7 +698,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn remove_running_job_cleans_up() {
         let e = env("sleep 30", 2);
-        e.engine.add(new_job("a"));
+        e.engine.add(new_job("a")).unwrap();
         tokio::time::sleep(Duration::from_millis(200)).await;
         e.engine.remove(1).unwrap();
         assert!(e.engine.list().is_empty());
@@ -706,7 +710,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn failed_job_keeps_message_and_can_restart() {
         let e = env("echo 'ERROR: boom' >&2; exit 1", 2);
-        e.engine.add(new_job("a"));
+        e.engine.add(new_job("a")).unwrap();
         wait_for(&e.engine, |j| matches!(j[0].state, JobState::Failed(_))).await;
         assert_eq!(
             state_of(&e.engine, 1),
@@ -770,7 +774,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn shutdown_for_exit_requeues_and_waits_for_children() {
         let e = env("sleep 30", 2);
-        e.engine.add(new_job("a"));
+        e.engine.add(new_job("a")).unwrap();
         wait_for(&e.engine, |_| e.engine.has_active()).await;
         let engine = e.engine.clone();
         tokio::task::spawn_blocking(move || engine.shutdown_for_exit(Duration::from_secs(2)))
@@ -795,7 +799,7 @@ mod tests {
         q.save(&d.path().join("data/queue.json")).unwrap();
         let engine = engine_at(d.path(), "sleep 30", 1); // start() 를 부르지 않는다
         assert_eq!(state_of(&engine, 1), JobState::Queued);
-        assert_eq!(engine.add(new_job("b")).id, 2);
+        assert_eq!(engine.add(new_job("b")).unwrap().id, 2);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -833,6 +837,15 @@ mod tests {
         let j = &engine.list()[0];
         assert_eq!(j.state, JobState::Queued);
         assert_eq!((&j.output, &j.speed, &j.eta), (&None, &None, &None));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn add_rejects_non_youtube_url() {
+        let e = env("sleep 30", 1);
+        let mut j = new_job("a");
+        j.url = "--exec=touch /tmp/pwned".into();
+        assert!(matches!(e.engine.add(j), Err(EngineError::InvalidUrl)));
+        assert!(e.engine.list().is_empty());
     }
 
     #[test]

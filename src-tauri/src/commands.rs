@@ -71,8 +71,8 @@ pub async fn probe(engine: State<'_, Engine>, url: String) -> CmdResult<VideoInf
 }
 
 #[tauri::command]
-pub fn add_job(engine: State<'_, Engine>, job: NewJob) -> Job {
-    engine.add(job)
+pub fn add_job(engine: State<'_, Engine>, job: NewJob) -> CmdResult<Job> {
+    Ok(engine.add(job)?)
 }
 
 /// 시트 없이 설정 기본값으로 바로 추가.

@@ -203,6 +203,7 @@ pub fn probe_args(url: &str, tools: &Tools) -> Vec<String> {
         "--no-playlist".into(),
         "--js-runtimes".into(),
         deno_flag(tools),
+        "--".into(),
         url.into(),
     ]
 }
@@ -248,6 +249,7 @@ pub fn download_args(url: &str, o: &JobOptions, tools: &Tools, out_dir: &Path) -
     a.extend([
         "-o".into(),
         out_dir.join("%(title)s.%(ext)s").display().to_string(),
+        "--".into(),
         url.into(),
     ]);
     a
@@ -396,6 +398,7 @@ mod tests {
                 "--no-playlist",
                 "--js-runtimes",
                 "deno:/bin/deno",
+                "--",
                 "https://youtu.be/x"
             ]
         );
@@ -427,7 +430,8 @@ mod tests {
             s.contains(&format!("--progress-template {PROGRESS_TEMPLATE}")),
             "{s}"
         );
-        assert_eq!(a[a.len() - 2], "/c/jobs/1/%(title)s.%(ext)s");
+        assert_eq!(a[a.len() - 3], "/c/jobs/1/%(title)s.%(ext)s");
+        assert_eq!(a[a.len() - 2], "--");
         assert_eq!(a.last().unwrap(), "https://youtu.be/x");
     }
 
