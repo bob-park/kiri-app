@@ -5,6 +5,7 @@ mod ipc_server;
 mod quit;
 mod settings;
 mod tray;
+mod updater;
 mod windows;
 
 use kiri_core::{
@@ -28,6 +29,7 @@ pub(crate) fn sidecar(name: &str) -> PathBuf {
 fn on_queue_change(app: &AppHandle, jobs: &[Job]) {
     let _ = app.emit("queue-changed", jobs);
     tray::relabel_queue(app, jobs);
+    updater::on_queue_change(app, jobs);
 }
 
 pub fn run() {
@@ -35,6 +37,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             let path = app.path();
@@ -43,6 +46,7 @@ pub fn run() {
             ));
             app.manage(bootstrap::ToolsState::default());
             app.manage(ipc_server::IpcState::default());
+            app.manage(updater::UpdateState::default());
 
             let bin = path.app_data_dir()?.join("bin");
             let tools = Tools {
@@ -67,7 +71,8 @@ pub fn run() {
             tray::build(&handle)?;
             engine.start();
             ipc_server::spawn(&handle, engine);
-            bootstrap::spawn(handle);
+            bootstrap::spawn(handle.clone());
+            updater::spawn_periodic(handle);
             Ok(())
         })
         .on_menu_event(tray::on_menu_event)
@@ -83,6 +88,9 @@ pub fn run() {
             commands::restart_job,
             commands::tools_status,
             commands::update_tools,
+            commands::update_status,
+            commands::check_update,
+            commands::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building kiri")

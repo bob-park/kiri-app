@@ -30,7 +30,7 @@ pub fn resolve_with(pref: &str, system: Option<&str>) -> Lang {
     }
 }
 
-// check_update·install_update·settings_title 은 업데이트·설정 창 작업에서 쓴다.
+// settings_title 은 설정 창 작업(Task 18)에서 쓴다.
 #[allow(dead_code)]
 pub struct Labels {
     pub open: &'static str,

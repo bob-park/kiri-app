@@ -5,6 +5,7 @@ import "./index.css";
 import { useSettings } from "./lib/settings";
 import { useQueue } from "./lib/queue";
 import { useTools } from "./lib/tools";
+import { useUpdate } from "./lib/update";
 import { applyTheme } from "./lib/theme";
 import { initI18n, resolveLang } from "./lib/i18n";
 import { Toasts } from "./components/Toasts";
@@ -17,7 +18,7 @@ function Root() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const unsubs = [subscribeBackend(), useQueue.getState().bind(), useTools.getState().bind()];
+    const unsubs = [subscribeBackend(), useQueue.getState().bind(), useTools.getState().bind(), useUpdate.getState().subscribe()];
     load().then(() => setReady(true));
     return () => unsubs.forEach((u) => u());
   }, []);

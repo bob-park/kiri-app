@@ -53,9 +53,28 @@ pub fn summary(l: &Labels, jobs: &[Job]) -> String {
 pub struct TrayItems {
     pub summary: MenuItem<Wry>,
     pub open: MenuItem<Wry>,
+    pub update: MenuItem<Wry>,
     pub quit: MenuItem<Wry>,
     /// 앱 메뉴의 종료(⌘Q)
     pub app_quit: MenuItem<Wry>,
+}
+
+fn update_label(l: &Labels, pending: Option<crate::updater::UpdateInfo>) -> String {
+    match pending {
+        Some(info) => l.install_update.replace("{}", &info.version),
+        None => l.check_update.to_string(),
+    }
+}
+
+/// 업데이트 확인이 끝날 때마다.
+pub fn relabel_update(app: &AppHandle) {
+    let Some(items) = app.try_state::<TrayItems>() else {
+        return;
+    };
+    let _ = items.update.set_text(update_label(
+        &i18n::current(app),
+        crate::updater::status(app),
+    ));
 }
 
 /// 설정이 저장될 때. 트레이가 아직 없으면 아무것도 하지 않는다.
@@ -65,6 +84,9 @@ pub fn relabel(app: &AppHandle, settings: &Settings) {
     };
     let l = i18n::labels(i18n::resolve(&settings.general.ui_language));
     let _ = items.open.set_text(l.open);
+    let _ = items
+        .update
+        .set_text(update_label(&l, crate::updater::status(app)));
     let _ = items.quit.set_text(l.quit);
     let _ = items.app_quit.set_text(l.quit);
     if let Some(engine) = app.try_state::<Engine>() {
@@ -95,6 +117,7 @@ pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         "open" => {
             let _ = windows::show_main(app);
         }
+        "update" => crate::updater::on_tray_click(app.clone()),
         // ExitRequested 를 거쳐 종료 확인을 받는다.
         "quit" => app.exit(0),
         _ => {}
@@ -138,11 +161,18 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let l = i18n::current(app);
     let summary_item = MenuItem::with_id(app, "summary", l.idle, false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", l.open, true, None::<&str>)?;
+    let update = MenuItem::with_id(
+        app,
+        "update",
+        update_label(&l, crate::updater::status(app)),
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", l.quit, true, None::<&str>)?;
     let menu = MenuBuilder::new(app)
         .items(&[&summary_item])
         .separator()
-        .items(&[&open])
+        .items(&[&open, &update])
         .separator()
         .items(&[&quit])
         .build()?;
@@ -176,6 +206,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     app.manage(TrayItems {
         summary: summary_item,
         open,
+        update,
         quit,
         app_quit,
     });
@@ -240,5 +271,16 @@ mod tests {
             ),
             "진행 중 2개 · 50%"
         );
+    }
+
+    #[test]
+    fn update_label_follows_pending_state() {
+        let l = i18n::labels(i18n::Lang::Ko);
+        assert_eq!(update_label(&l, None), "업데이트 확인");
+        let info = crate::updater::UpdateInfo {
+            version: "0.2.0".into(),
+            notes: String::new(),
+        };
+        assert_eq!(update_label(&l, Some(info)), "v0.2.0 설치");
     }
 }

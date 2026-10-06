@@ -118,3 +118,18 @@ mod tests {
         );
     }
 }
+
+#[tauri::command]
+pub fn update_status(app: AppHandle) -> Option<crate::updater::UpdateInfo> {
+    crate::updater::status(&app)
+}
+
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<Option<crate::updater::UpdateInfo>, String> {
+    crate::updater::check(&app).await
+}
+
+#[tauri::command]
+pub async fn install_update(app: AppHandle, after_queue: bool) -> Result<(), String> {
+    crate::updater::request_install(&app, after_queue).await
+}

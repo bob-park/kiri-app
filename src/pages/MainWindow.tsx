@@ -10,6 +10,7 @@ import { extractUrl, isEditableTarget } from "../lib/paste";
 import { JobRow } from "../components/JobRow";
 import { Icon } from "../components/Icon";
 import { OptionsSheet } from "../components/OptionsSheet";
+import { UpdateBanner } from "../components/UpdateBanner";
 import type { VideoInfo } from "../lib/types";
 
 interface SheetState {
@@ -111,6 +112,7 @@ export default function MainWindow() {
         <span className="flex-1 truncate text-center text-xs text-fg-muted">{t("app.dropHint")}</span>
         <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" /></button>
       </header>
+      <UpdateBanner />
       <ToolsNotice />
       <main className="flex-1 overflow-y-auto">
         {jobs.length === 0 ? (
