@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
-pub const PROGRESS_TEMPLATE: &str =
-    "download:KIRI|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s";
+pub const PROGRESS_TEMPLATE: &str = "download:KIRI|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress.fragment_index)s|%(progress.fragment_count)s";
 
 const HOSTS: [&str; 5] = [
     "youtube.com",
@@ -263,6 +262,8 @@ pub struct Progress {
 }
 
 /// PROGRESS_TEMPLATE 이 찍은 줄만 해석한다.
+/// HLS 처럼 조각으로 받을 때 yt-dlp 의 퍼센트는 추정 전체 크기로 계산돼 오르내리므로,
+/// 조각 수가 있으면 받은 조각 / 전체 조각을 쓴다.
 pub fn parse_progress(line: &str) -> Option<Progress> {
     let rest = line.trim().strip_prefix("KIRI|")?;
     let mut parts = rest.split('|');
@@ -278,11 +279,81 @@ pub fn parse_progress(line: &str) -> Option<Progress> {
             .filter(|s| !s.is_empty() && !s.starts_with("Unknown") && *s != "N/A" && *s != "NA")
             .map(String::from)
     };
+    let speed = clean(parts.next());
+    let eta = clean(parts.next());
+    let num = |s: Option<&str>| s.and_then(|s| s.trim().parse::<u32>().ok());
+    let fraction = match (num(parts.next()), num(parts.next())) {
+        (Some(index), Some(count)) if count > 0 => index as f32 / count as f32,
+        _ => pct / 100.0,
+    };
     Some(Progress {
-        fraction: (pct / 100.0).clamp(0.0, 1.0),
-        speed: clean(parts.next()),
-        eta: clean(parts.next()),
+        fraction: fraction.clamp(0.0, 1.0),
+        speed,
+        eta,
     })
+}
+
+/// 영상+오디오를 따로 받으면 2, 아니면 1.
+pub fn expected_streams(o: &JobOptions) -> usize {
+    if o.format_id.is_some() && !o.preset.is_audio_only() {
+        2
+    } else {
+        1
+    }
+}
+
+const SUBTITLE_EXT: [&str; 9] = [
+    "vtt", "srt", "ttml", "srv1", "srv2", "srv3", "json3", "ass", "lrc",
+];
+
+/// yt-dlp 출력 전체를 받아 되돌아가지 않는 다운로드 진행률을 만든다.
+/// 자막 파일 진행률은 무시하고, 영상+오디오는 0~95% / 95~100% 로 이어 붙인다.
+pub struct ProgressTracker {
+    streams: usize,
+    media: usize,
+    skipping: bool,
+    shown: f32,
+}
+
+impl ProgressTracker {
+    const VIDEO_SHARE: f32 = 0.95;
+
+    pub fn new(streams: usize) -> Self {
+        Self {
+            streams: streams.max(1),
+            media: 0,
+            skipping: false,
+            shown: 0.0,
+        }
+    }
+
+    pub fn feed(&mut self, line: &str) -> Option<Progress> {
+        if let Some(path) = line.trim().strip_prefix("[download] Destination: ") {
+            let ext = Path::new(path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            self.skipping = SUBTITLE_EXT.contains(&ext);
+            if !self.skipping {
+                self.media += 1;
+            }
+            return None;
+        }
+        let p = parse_progress(line)?;
+        if self.skipping {
+            return None;
+        }
+        let (lo, hi) = match (self.streams, self.media) {
+            (1, _) => (0.0, 1.0),
+            (_, 0 | 1) => (0.0, Self::VIDEO_SHARE),
+            _ => (Self::VIDEO_SHARE, 1.0),
+        };
+        self.shown = self.shown.max(lo + (hi - lo) * p.fraction);
+        Some(Progress {
+            fraction: self.shown,
+            ..p
+        })
+    }
 }
 
 #[cfg(test)]
@@ -458,5 +529,86 @@ mod tests {
         assert_eq!((done.fraction, done.speed, done.eta), (1.0, None, None));
         assert!(parse_progress("[download] Destination: x.mp4").is_none());
         assert!(parse_progress("KIRI|  N/A%|x|y").is_none());
+    }
+
+    #[test]
+    fn fragment_counts_win_over_estimated_percent() {
+        // HLS: 퍼센트는 추정 크기로 계산돼 출렁인다. 조각 수가 있으면 그것을 쓴다.
+        let p = parse_progress("KIRI| 21.7%|1.0MiB/s|00:10|10|41").unwrap();
+        assert!((p.fraction - 10.0 / 41.0).abs() < 1e-4);
+        let manifest = parse_progress("KIRI|100.0%|Unknown B/s|NA|0|41").unwrap();
+        assert_eq!(manifest.fraction, 0.0);
+        let plain = parse_progress("KIRI| 45.3%|1.0MiB/s|00:10|NA|NA").unwrap();
+        assert!((plain.fraction - 0.453).abs() < 1e-4);
+    }
+
+    #[test]
+    fn tracker_never_goes_backwards_on_hls() {
+        // 실제 4K HLS 다운로드에서 잡은 줄 (퍼센트가 25.2 → 21.7 로 떨어진다)
+        let mut t = ProgressTracker::new(1);
+        let lines = [
+            "[download] Destination: /tmp/v.f625.mp4",
+            "KIRI|100.0%|Unknown B/s|NA|0|41",
+            "KIRI| 10.6%|1MiB/s|00:30|1|41",
+            "KIRI|  5.5%|1MiB/s|00:30|1|41",
+            "KIRI| 25.2%|1MiB/s|00:20|9|41",
+            "KIRI| 21.7%|1MiB/s|00:20|10|41",
+            "KIRI| 26.8%|1MiB/s|00:19|10|41",
+        ];
+        let shown: Vec<f32> = lines
+            .iter()
+            .filter_map(|l| t.feed(l))
+            .map(|p| p.fraction)
+            .collect();
+        assert_eq!(shown.len(), 6);
+        assert_eq!(shown[0], 0.0, "manifest must not show 100%");
+        assert!(shown.windows(2).all(|w| w[1] >= w[0]), "{shown:?}");
+    }
+
+    #[test]
+    fn tracker_clamps_plain_percent_and_ignores_subtitles() {
+        let mut t = ProgressTracker::new(1);
+        assert!(t.feed("[download] Destination: /tmp/v.ko.vtt").is_none());
+        assert!(
+            t.feed("KIRI|100.0%|1MiB/s|00:00").is_none(),
+            "subtitle progress ignored"
+        );
+        t.feed("[download] Destination: /tmp/v.mp4");
+        assert_eq!(t.feed("KIRI| 50.0%|1MiB/s|00:01").unwrap().fraction, 0.5);
+        let back = t.feed("KIRI| 40.0%|2MiB/s|00:02").unwrap();
+        assert_eq!(back.fraction, 0.5);
+        assert_eq!(back.speed.as_deref(), Some("2MiB/s"), "speed still updates");
+    }
+
+    #[test]
+    fn tracker_maps_video_then_audio_streams() {
+        let mut t = ProgressTracker::new(2);
+        t.feed("[download] Destination: /tmp/v.f625.mp4");
+        assert!((t.feed("KIRI|100.0%|1MiB/s|00:00").unwrap().fraction - 0.95).abs() < 1e-4);
+        t.feed("[download] Destination: /tmp/v.f251.webm");
+        assert!((t.feed("KIRI|  0.0%|1MiB/s|00:01").unwrap().fraction - 0.95).abs() < 1e-4);
+        assert!((t.feed("KIRI| 50.0%|1MiB/s|00:01").unwrap().fraction - 0.975).abs() < 1e-4);
+        assert!((t.feed("KIRI|100.0%|1MiB/s|00:00").unwrap().fraction - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn expected_streams_follows_options() {
+        let video = JobOptions {
+            format_id: Some("299".into()),
+            preset: Preset::Original,
+            subtitles: vec![],
+            auto_subtitles: false,
+        };
+        assert_eq!(expected_streams(&video), 2);
+        let audio = JobOptions {
+            preset: Preset::Mp3,
+            ..video.clone()
+        };
+        assert_eq!(expected_streams(&audio), 1);
+        let audio_only = JobOptions {
+            format_id: None,
+            ..video
+        };
+        assert_eq!(expected_streams(&audio_only), 1);
     }
 }

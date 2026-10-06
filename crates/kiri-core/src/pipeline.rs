@@ -97,8 +97,9 @@ pub async fn run(
         eta: None,
     });
     let args = ytdlp::download_args(&job.url, &job.options, &cfg.tools, &cfg.work_dir);
+    let mut tracker = ytdlp::ProgressTracker::new(ytdlp::expected_streams(&job.options));
     runner::run(&cfg.tools.ytdlp, &args, cancel, |line| {
-        if let Some(p) = ytdlp::parse_progress(line) {
+        if let Some(p) = tracker.feed(line) {
             report(Report {
                 stage: Stage::Downloading,
                 progress: p.fraction,
@@ -260,12 +261,14 @@ mod tests {
         assert_eq!(out, e.cfg.download_dir.join("Fake Video.mp4"));
         assert!(out.exists());
         assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
+        // 영상+오디오 작업이라 영상 50% 는 전체의 47.5% (영상 몫 95%)
         assert!(
             reports
                 .iter()
-                .any(|r| r.stage == Stage::Downloading && r.progress == 0.5)
+                .any(|r| r.stage == Stage::Downloading && (r.progress - 0.475).abs() < 1e-4)
         );
         assert!(reports.iter().all(|r| r.stage == Stage::Downloading));
+        assert!(reports.windows(2).all(|w| w[1].progress >= w[0].progress));
     }
 
     #[tokio::test]

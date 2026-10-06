@@ -17,6 +17,7 @@ pub fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
 pub const FAKE_YTDLP_DOWNLOAD: &str = r#"out=""
 while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift;; esac; shift; done
 dir=$(dirname "$out")
+echo "[download] Destination: $dir/Fake Video.mp4"
 echo "KIRI|  50.0%|  1.00MiB/s|00:01"
 : > "$dir/Fake Video.mp4"
 : > "$dir/Fake Video.ko.srt"
