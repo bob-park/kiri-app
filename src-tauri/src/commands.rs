@@ -1,5 +1,6 @@
 use crate::{
     bootstrap::{self, ToolsState, ToolsStatus},
+    cli_install::{self, CliStatus},
     settings::{self, Settings, SettingsState},
 };
 use kiri_core::{
@@ -8,6 +9,7 @@ use kiri_core::{
     ytdlp::VideoInfo,
 };
 use serde::Serialize;
+use std::path::Path;
 use tauri::{AppHandle, State};
 
 /// 프론트로 가는 오류. code 는 i18n 키 error.<code>.
@@ -132,4 +134,34 @@ pub async fn check_update(app: AppHandle) -> Result<Option<crate::updater::Updat
 #[tauri::command]
 pub async fn install_update(app: AppHandle, after_queue: bool) -> Result<(), String> {
     crate::updater::request_install(&app, after_queue).await
+}
+
+#[tauri::command]
+pub fn open_settings(app: AppHandle) -> CmdResult<()> {
+    Ok(crate::windows::show_settings(&app)?)
+}
+
+#[tauri::command]
+pub fn cli_status(ipc: State<'_, crate::ipc_server::IpcState>) -> CliStatus {
+    let target = crate::sidecar("kiri-cli");
+    let link = Path::new(cli_install::LINK);
+    CliStatus {
+        installed: cli_install::is_installed(&target, link),
+        link: cli_install::LINK.into(),
+        target: target.display().to_string(),
+        socket_error: ipc.0.lock().unwrap().clone(),
+    }
+}
+
+#[tauri::command]
+pub fn install_cli() -> CmdResult<()> {
+    Ok(cli_install::install(
+        &crate::sidecar("kiri-cli"),
+        Path::new(cli_install::LINK),
+    )?)
+}
+
+#[tauri::command]
+pub fn uninstall_cli() -> CmdResult<()> {
+    Ok(cli_install::uninstall(Path::new(cli_install::LINK))?)
 }

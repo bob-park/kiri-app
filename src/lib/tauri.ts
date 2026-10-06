@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DeepPartial, Job, NewJob, Settings, ToolsStatus, UpdateInfo, VideoInfo } from "./types";
+import type { CliStatus, DeepPartial, Job, NewJob, Settings, ToolsStatus, UpdateInfo, VideoInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
@@ -14,6 +14,9 @@ export const api = {
   toolsStatus: () => invoke<ToolsStatus>("tools_status"),
   updateTools: () => invoke<void>("update_tools"),
   openSettings: () => invoke<void>("open_settings"),
+  cliStatus: () => invoke<CliStatus>("cli_status"),
+  installCli: () => invoke<void>("install_cli"),
+  uninstallCli: () => invoke<void>("uninstall_cli"),
   updateStatus: () => invoke<UpdateInfo | null>("update_status"),
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
   installUpdate: (afterQueue: boolean) => invoke<void>("install_update", { afterQueue }),

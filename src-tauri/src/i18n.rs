@@ -30,8 +30,6 @@ pub fn resolve_with(pref: &str, system: Option<&str>) -> Lang {
     }
 }
 
-// settings_title 은 설정 창 작업(Task 18)에서 쓴다.
-#[allow(dead_code)]
 pub struct Labels {
     pub open: &'static str,
     pub quit: &'static str,

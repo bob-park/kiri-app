@@ -11,6 +11,7 @@ import { initI18n, resolveLang } from "./lib/i18n";
 import { Toasts } from "./components/Toasts";
 
 const MainWindow = React.lazy(() => import("./pages/MainWindow"));
+const SettingsWindow = React.lazy(() => import("./pages/SettingsWindow"));
 const label = getCurrentWindow().label;
 
 function Root() {
@@ -33,6 +34,7 @@ function Root() {
   return (
     <React.Suspense fallback={null}>
       {label === "main" && <MainWindow />}
+      {label === "settings" && <SettingsWindow />}
       <Toasts />
     </React.Suspense>
   );

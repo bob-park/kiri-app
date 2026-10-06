@@ -1,4 +1,5 @@
 mod bootstrap;
+mod cli_install;
 mod commands;
 mod i18n;
 mod ipc_server;
@@ -91,6 +92,10 @@ pub fn run() {
             commands::update_status,
             commands::check_update,
             commands::install_update,
+            commands::open_settings,
+            commands::cli_status,
+            commands::install_cli,
+            commands::uninstall_cli,
         ])
         .build(tauri::generate_context!())
         .expect("error while building kiri")

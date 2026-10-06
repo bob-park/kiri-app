@@ -2,6 +2,7 @@ use crate::settings::SettingsState;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 pub const MAIN: &str = "main";
+pub const SETTINGS: &str = "settings";
 
 /// 창을 숨기면 Dock 에서도 빠지고 메뉴 막대에만 남는다.
 pub fn set_dock_visible(app: &AppHandle, visible: bool) {
@@ -48,4 +49,18 @@ pub fn show_main(app: &AppHandle) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+pub fn show_settings(app: &AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window(SETTINGS) {
+        w.show().map_err(|e| e.to_string())?;
+        return w.set_focus().map_err(|e| e.to_string());
+    }
+    WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("/".into()))
+        .title(crate::i18n::current(app).settings_title)
+        .inner_size(560.0, 460.0)
+        .resizable(false)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
