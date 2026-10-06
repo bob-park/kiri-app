@@ -63,6 +63,7 @@ pub fn job(preset: Preset) -> Job {
         speed: None,
         eta: None,
         output: None,
+        work_dir: None,
         created_at: 0,
     }
 }

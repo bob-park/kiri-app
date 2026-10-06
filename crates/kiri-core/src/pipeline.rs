@@ -20,7 +20,7 @@ pub struct PipelineCfg {
     pub tools: Tools,
     pub hw_accel: bool,
     pub download_dir: PathBuf,
-    /// 작업 전용 캐시 폴더 (cache/jobs/<id>)
+    /// 작업 전용 폴더. 앱에서는 `<저장 폴더>/<제목>.kiripart` (표식 `.kiri` 를 함께 만든다)
     pub work_dir: PathBuf,
     pub log_path: PathBuf,
 }
@@ -88,7 +88,7 @@ pub async fn run(
     if files::check_writable(&cfg.download_dir).is_err() {
         return Err(PipelineError::Failed(ERR_DIR_UNWRITABLE.into()));
     }
-    fs::create_dir_all(&cfg.work_dir).map_err(io_fail)?;
+    files::make_part_dir(&cfg.work_dir).map_err(io_fail)?;
 
     report(Report {
         stage: Stage::Downloading,

@@ -122,6 +122,9 @@ pub struct Job {
     pub eta: Option<String>,
     #[serde(default)]
     pub output: Option<PathBuf>,
+    /// 받는 중인 파일을 모아 두는 `<저장 폴더>/<제목>.kiripart` 패키지. 처음 시작할 때 정한다.
+    #[serde(default)]
+    pub work_dir: Option<PathBuf>,
     /// unix epoch milliseconds
     #[serde(default)]
     pub created_at: u64,

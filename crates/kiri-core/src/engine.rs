@@ -1,5 +1,6 @@
 //! 앱 하나에 하나. 큐 상태 + 동시 실행 + 프로세스 취소를 묶는다. UI 와 CLI 가 같은 Engine 을 쓴다.
 use crate::{
+    files,
     model::{Job, JobOptions, JobState, NewJob, Preset, Tools},
     pipeline::{self, PipelineCfg, PipelineError, Report, Stage},
     queue::QueueState,
@@ -8,7 +9,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -112,16 +113,20 @@ impl Engine {
     ) -> Engine {
         let mut state = QueueState::load(&paths.queue_file);
         state.recover();
-        // 큐에 없는 작업의 캐시(삭제 도중 종료 등)는 다시 쓰일 일이 없다.
-        if let Ok(dirs) = std::fs::read_dir(paths.cache_dir.join("jobs")) {
-            for d in dirs.flatten() {
-                let listed = d
-                    .file_name()
-                    .to_str()
-                    .and_then(|n| n.parse::<u64>().ok())
-                    .is_some_and(|id| state.jobs.iter().any(|j| j.id == id));
-                if !listed {
-                    let _ = std::fs::remove_dir_all(d.path());
+        // 예전 버전의 작업 캐시. 받던 작업은 처음부터 다시 받는다.
+        let _ = std::fs::remove_dir_all(paths.cache_dir.join("jobs"));
+        // 큐에 없는 패키지(삭제 도중 종료 등)는 다시 쓰일 일이 없다. 표식이 있는 것만 지운다.
+        if let Ok(entries) = std::fs::read_dir(&config.download_dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                let ours = p.extension().is_some_and(|x| x == files::PART_EXT)
+                    && p.join(files::PART_MARKER).is_file();
+                let listed = state
+                    .jobs
+                    .iter()
+                    .any(|j| j.work_dir.as_deref() == Some(p.as_path()));
+                if ours && !listed {
+                    let _ = std::fs::remove_dir_all(&p);
                 }
             }
         }
@@ -290,13 +295,14 @@ impl Engine {
 
     pub fn remove(&self, id: u64) -> Result<(), EngineError> {
         let removed = self.0.state.lock().unwrap().remove(id);
-        removed.ok_or(EngineError::NotFound(id))?;
+        let job = removed.ok_or(EngineError::NotFound(id))?;
         let token = self.0.running.lock().unwrap().get(&id).cloned();
-        match token {
-            Some(t) => t.cancel(), // 작업 태스크가 끝나면서 캐시 폴더를 지운다
-            None => {
-                let _ = std::fs::remove_dir_all(self.job_dir(id));
+        match (token, job.work_dir) {
+            (Some(t), _) => t.cancel(), // 작업 태스크가 끝나면서 패키지를 지운다
+            (None, Some(dir)) => {
+                let _ = std::fs::remove_dir_all(dir);
             }
+            (None, None) => {}
         }
         self.save();
         self.notify();
@@ -347,10 +353,6 @@ impl Engine {
         self.save();
     }
 
-    fn job_dir(&self, id: u64) -> PathBuf {
-        self.0.paths.cache_dir.join("jobs").join(id.to_string())
-    }
-
     fn save(&self) {
         let st = self.0.state.lock().unwrap();
         if let Err(e) = st.save(&self.0.paths.queue_file) {
@@ -372,7 +374,8 @@ impl Engine {
             if self.0.shutting_down.load(Ordering::SeqCst) {
                 return;
             }
-            let max = self.config().max_concurrent.max(1);
+            let cfg = self.config();
+            let max = cfg.max_concurrent.max(1);
             let next = {
                 let mut running = self.0.running.lock().unwrap();
                 if running.len() >= max {
@@ -385,6 +388,16 @@ impl Engine {
                 let job = st.get_mut(id).expect("queued job exists");
                 job.state = JobState::Downloading;
                 job.progress = 0.0;
+                if job.work_dir.is_none() {
+                    let dir = files::unique_path(
+                        &cfg.download_dir,
+                        &format!("{}.{}", files::safe_title(&job.title), files::PART_EXT),
+                    );
+                    // 바로 만들어 이름을 선점한다(같은 제목의 다음 작업이 다른 이름을 받게).
+                    // 실패는 pipeline 이 저장 폴더 오류로 보고한다.
+                    let _ = files::make_part_dir(&dir);
+                    job.work_dir = Some(dir);
+                }
                 let job = job.clone();
                 let token = CancellationToken::new();
                 running.insert(id, token.clone());
@@ -404,14 +417,14 @@ impl Engine {
                 tools: me.0.tools.clone(),
                 hw_accel: cfg.hw_accel,
                 download_dir: cfg.download_dir,
-                work_dir: me.job_dir(job.id),
+                work_dir: job.work_dir.clone().expect("pump assigns work_dir"),
                 log_path: me.0.paths.log_dir.join(format!("{}.log", job.id)),
             };
             let id = job.id;
             let reporter = me.clone();
             let result =
                 pipeline::run(&job, &pcfg, &token, move |r| reporter.on_report(id, r)).await;
-            me.finish(id, result);
+            me.finish(id, Some(&pcfg.work_dir), result);
         });
     }
 
@@ -439,7 +452,7 @@ impl Engine {
         self.notify();
     }
 
-    fn finish(&self, id: u64, result: Result<PathBuf, PipelineError>) {
+    fn finish(&self, id: u64, work_dir: Option<&Path>, result: Result<PathBuf, PipelineError>) {
         let still_listed = {
             let mut st = self.0.state.lock().unwrap();
             match st.get_mut(id) {
@@ -452,6 +465,7 @@ impl Engine {
                             job.state = JobState::Completed;
                             job.progress = 1.0;
                             job.output = Some(path.clone());
+                            job.work_dir = None;
                         }
                         Err(_) if !job.state.is_active() => {}
                         Err(PipelineError::Cancelled) => job.state = JobState::Stopped,
@@ -465,8 +479,9 @@ impl Engine {
                 }
             }
         };
-        if !still_listed || result.is_ok() {
-            let _ = std::fs::remove_dir_all(self.job_dir(id));
+        // 중지·실패는 패키지를 남겨 재시작 때 이어 받는다.
+        if let Some(dir) = work_dir.filter(|_| !still_listed || result.is_ok()) {
+            let _ = std::fs::remove_dir_all(dir);
         }
         self.0.running.lock().unwrap().remove(&id);
         self.save();
@@ -598,9 +613,63 @@ mod tests {
             Some(e.d.path().join("Movies/kiri/Fake Video.mp4").as_path())
         );
         assert!(
-            !e.d.path().join("cache/jobs/1").exists(),
-            "cache cleaned after success"
+            !e.d.path().join("Movies/kiri/a.kiripart").exists(),
+            "package cleaned after success"
         );
+        assert_eq!(done.work_dir, None);
+    }
+
+    fn work_dir_of(e: &Engine, id: u64) -> PathBuf {
+        e.list()
+            .into_iter()
+            .find(|j| j.id == id)
+            .unwrap()
+            .work_dir
+            .expect("work_dir assigned")
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn running_job_downloads_into_kiripart_package() {
+        let e = env("sleep 30", 2);
+        e.engine.add(new_job("Rust in 100 Seconds")).unwrap();
+        let wd = work_dir_of(&e.engine, 1);
+        assert_eq!(
+            wd,
+            e.d.path().join("Movies/kiri/Rust in 100 Seconds.kiripart")
+        );
+        assert!(wd.join(".kiri").is_file());
+        // 저장된 큐에도 남아야 재실행 때 이어 받는다.
+        let saved = QueueState::load(&e.d.path().join("data/queue.json"));
+        assert_eq!(saved.jobs[0].work_dir.as_deref(), Some(wd.as_path()));
+        e.engine.stop(1).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn same_title_jobs_get_distinct_packages() {
+        let e = env("sleep 30", 2);
+        e.engine.add(new_job("a")).unwrap();
+        e.engine.add(new_job("a")).unwrap();
+        let kiri = e.d.path().join("Movies/kiri");
+        assert_eq!(work_dir_of(&e.engine, 1), kiri.join("a.kiripart"));
+        assert_eq!(work_dir_of(&e.engine, 2), kiri.join("a (1).kiripart"));
+        e.engine.stop(1).unwrap();
+        e.engine.stop(2).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restart_reuses_work_dir_even_if_download_dir_changed() {
+        let e = env("sleep 30", 2);
+        e.engine.add(new_job("a")).unwrap();
+        let wd = work_dir_of(&e.engine, 1);
+        e.engine.stop(1).unwrap();
+        wait_for(&e.engine, |_| !e.engine.has_active()).await;
+        assert!(wd.join(".kiri").exists(), "stopped job keeps its package");
+        let mut cfg = e.engine.config();
+        cfg.download_dir = e.d.path().join("Elsewhere");
+        e.engine.set_config(cfg);
+        e.engine.restart(1).unwrap();
+        assert_eq!(work_dir_of(&e.engine, 1), wd);
+        e.engine.stop(1).unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -713,9 +782,11 @@ mod tests {
         let e = env("sleep 30", 2);
         e.engine.add(new_job("a")).unwrap();
         tokio::time::sleep(Duration::from_millis(200)).await;
+        let wd = e.d.path().join("Movies/kiri/a.kiripart");
+        assert!(wd.exists());
         e.engine.remove(1).unwrap();
         assert!(e.engine.list().is_empty());
-        wait_for(&e.engine, |_| !e.d.path().join("cache/jobs/1").exists()).await;
+        wait_for(&e.engine, |_| !wd.exists()).await;
         assert!(e.engine.list().is_empty(), "removed job resurrected");
         assert!(matches!(e.engine.remove(1), Err(EngineError::NotFound(1))));
     }
@@ -824,7 +895,7 @@ mod tests {
         q.save(&d.path().join("data/queue.json")).unwrap();
         let engine = engine_at(d.path(), "sleep 30", 1);
         let out = d.path().join("Movies/kiri/a.mp4");
-        engine.finish(1, Ok(out.clone()));
+        engine.finish(1, None, Ok(out.clone()));
         let j = &engine.list()[0];
         assert_eq!(j.state, JobState::Completed);
         assert_eq!(
@@ -862,18 +933,37 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn new_engine_removes_orphan_cache_dirs() {
+    async fn new_engine_removes_legacy_cache_and_orphan_packages() {
         let d = tempfile::tempdir().unwrap();
+        let kiri = d.path().join("Movies/kiri");
+        let marked = |n: &str| {
+            let p = kiri.join(n);
+            fs::create_dir_all(&p).unwrap();
+            fs::write(p.join(".kiri"), "").unwrap();
+            p
+        };
+        let stopped = marked("s.kiripart");
+        let queued = marked("q.kiripart");
+        let orphan = marked("o.kiripart");
+        let unmarked = kiri.join("foo.kiripart");
+        fs::create_dir_all(&unmarked).unwrap();
         let mut q = QueueState::default();
-        q.add(new_job("a"), 0);
+        q.add(new_job("s"), 0);
+        q.add(new_job("q"), 0);
         q.get_mut(1).unwrap().state = JobState::Stopped;
+        q.get_mut(1).unwrap().work_dir = Some(stopped.clone());
+        q.get_mut(2).unwrap().work_dir = Some(queued.clone());
         q.save(&d.path().join("data/queue.json")).unwrap();
-        let jobs = d.path().join("cache/jobs");
-        fs::create_dir_all(jobs.join("1")).unwrap();
-        fs::create_dir_all(jobs.join("7")).unwrap();
+        let legacy = d.path().join("cache/jobs");
+        fs::create_dir_all(legacy.join("1")).unwrap();
         let _engine = engine_at(d.path(), "sleep 30", 1);
-        assert!(jobs.join("1").exists(), "listed job's cache kept");
-        assert!(!jobs.join("7").exists(), "orphan removed");
+        assert!(!legacy.exists(), "legacy cache removed");
+        assert!(
+            stopped.exists() && queued.exists(),
+            "referenced packages kept"
+        );
+        assert!(!orphan.exists(), "orphan package removed");
+        assert!(unmarked.exists(), "package without marker is never deleted");
     }
 
     #[test]

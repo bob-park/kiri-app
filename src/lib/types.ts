@@ -49,6 +49,7 @@ export interface Job {
   speed: string | null;
   eta: string | null;
   output: string | null;
+  work_dir: string | null;
   created_at: number;
 }
 

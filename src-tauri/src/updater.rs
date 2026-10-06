@@ -200,6 +200,7 @@ mod tests {
             speed: None,
             eta: None,
             output: None,
+            work_dir: None,
             created_at: 0,
         }
     }

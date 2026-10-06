@@ -213,6 +213,7 @@ mod tests {
             speed: Some("2.1 MB/s".into()),
             eta: Some("00:12".into()),
             output: None,
+            work_dir: None,
             created_at: 0,
         }
     }

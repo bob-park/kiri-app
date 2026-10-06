@@ -33,6 +33,34 @@ pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
+/// `.kiripart` 패키지 안의 표식. 이게 있어야 kiri 가 만든 패키지로 보고 지운다.
+pub const PART_MARKER: &str = ".kiri";
+pub const PART_EXT: &str = "kiripart";
+
+/// 파일 이름으로 쓸 수 있는 제목. `/`·`:` 는 `_`, 앞뒤 공백·앞쪽 점 제거, 최대 120자.
+pub fn safe_title(title: &str) -> String {
+    let t: String = title
+        .trim()
+        .trim_start_matches('.')
+        .trim()
+        .chars()
+        .map(|c| if c == '/' || c == ':' { '_' } else { c })
+        .take(120)
+        .collect();
+    let t = t.trim_end();
+    if t.is_empty() {
+        "video".into()
+    } else {
+        t.into()
+    }
+}
+
+/// 패키지 폴더와 표식 파일을 만든다.
+pub fn make_part_dir(dir: &Path) -> io::Result<()> {
+    fs::create_dir_all(dir)?;
+    fs::write(dir.join(PART_MARKER), b"")
+}
+
 /// 폴더를 만들고 실제로 파일을 써 본다.
 pub fn check_writable(dir: &Path) -> io::Result<()> {
     fs::create_dir_all(dir)?;
@@ -115,6 +143,26 @@ mod tests {
         fs::set_permissions(&ro, fs::Permissions::from_mode(0o555)).unwrap();
         assert!(check_writable(&ro).is_err());
         fs::set_permissions(&ro, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[test]
+    fn safe_title_cleans_names() {
+        assert_eq!(safe_title("a/b:c"), "a_b_c");
+        assert_eq!(safe_title("  ..hidden  "), "hidden");
+        assert_eq!(safe_title(" . "), "video");
+        assert_eq!(safe_title(""), "video");
+        assert_eq!(safe_title("Rust in 100 Seconds"), "Rust in 100 Seconds");
+        let long = "가".repeat(200);
+        assert_eq!(safe_title(&long), "가".repeat(120));
+    }
+
+    #[test]
+    fn make_part_dir_writes_marker() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("x/a.kiripart");
+        make_part_dir(&p).unwrap();
+        assert!(p.join(PART_MARKER).is_file());
+        assert_eq!(find_media(&p).unwrap(), None);
     }
 
     #[test]

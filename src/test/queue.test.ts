@@ -5,7 +5,7 @@ import type { Job, JobState } from "../lib/types";
 const job = (state: JobState): Job => ({
   id: 1, url: "u", title: "t", thumbnail: null, duration_secs: null, quality_label: "720p",
   options: { format_id: null, preset: "original", subtitles: [], auto_subtitles: false },
-  state, progress: 0, speed: null, eta: null, output: null, created_at: 0,
+  state, progress: 0, speed: null, eta: null, output: null, work_dir: null, created_at: 0,
 });
 
 describe("queue helpers", () => {
