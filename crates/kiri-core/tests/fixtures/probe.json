@@ -1,0 +1,19 @@
+{
+  "id": "abc123",
+  "title": "Rust in 100 Seconds",
+  "channel": "Fireship",
+  "duration": 144,
+  "thumbnail": "https://i.ytimg.com/vi/abc123/maxresdefault.jpg",
+  "formats": [
+    {"format_id": "sb0", "ext": "mhtml", "vcodec": "none", "acodec": "none", "height": 45},
+    {"format_id": "139", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.5", "abr": 48.0, "filesize": 1000},
+    {"format_id": "251", "ext": "webm", "vcodec": "none", "acodec": "opus", "abr": 130.0, "filesize": 3000000},
+    {"format_id": "18", "ext": "mp4", "vcodec": "avc1.42001E", "acodec": "mp4a.40.2", "height": 360, "fps": 30, "tbr": 500, "filesize": 20000000},
+    {"format_id": "136", "ext": "mp4", "vcodec": "avc1.4d401f", "acodec": "none", "height": 720, "fps": 30, "tbr": 1500, "filesize": 40000000},
+    {"format_id": "247", "ext": "webm", "vcodec": "vp9", "acodec": "none", "height": 720, "fps": 30, "tbr": 1400, "filesize": 38000000},
+    {"format_id": "299", "ext": "mp4", "vcodec": "avc1.64002a", "acodec": "none", "height": 1080, "fps": 60, "tbr": 5000, "filesize_approx": 85000000},
+    {"format_id": "303", "ext": "webm", "vcodec": "vp09.00.41.08", "acodec": "none", "height": 1080, "fps": 60, "tbr": 4500, "filesize": 80000000}
+  ],
+  "subtitles": {"ko": [{}], "en": [{}], "live_chat": [{}]},
+  "automatic_captions": {"en-orig": [{}], "en": [{}], "ja": [{}], "ko": [{}]}
+}
