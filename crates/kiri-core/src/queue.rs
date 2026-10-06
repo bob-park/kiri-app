@@ -66,7 +66,9 @@ impl QueueState {
     pub fn load(path: &Path) -> QueueState {
         let mut q: QueueState = match fs::read_to_string(path) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
-                eprintln!("kiri queue: parse error, starting empty: {e}");
+                // 다음 save 가 덮어쓰기 전에 손상된 파일을 남겨 둔다.
+                eprintln!("kiri queue: parse error, moved to .bad, starting empty: {e}");
+                let _ = fs::rename(path, path.with_extension("json.bad"));
                 QueueState::default()
             }),
             Err(e) => {
@@ -179,6 +181,27 @@ mod tests {
         let bad = d.path().join("bad.json");
         fs::write(&bad, "{nope").unwrap();
         assert_eq!(QueueState::load(&bad), QueueState::default());
+        assert!(!bad.exists());
+        assert_eq!(
+            fs::read_to_string(d.path().join("bad.json.bad")).unwrap(),
+            "{nope"
+        );
+    }
+
+    #[test]
+    fn load_tolerates_missing_optional_fields() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("queue.json");
+        fs::write(
+            &path,
+            r#"{"next_id":2,"jobs":[{"id":1,"url":"https://youtu.be/x","title":"a",
+            "options":{"format_id":null,"preset":"mp3","subtitles":[],"auto_subtitles":false},
+            "state":{"kind":"queued"}}]}"#,
+        )
+        .unwrap();
+        let q = QueueState::load(&path);
+        assert_eq!(q.jobs.len(), 1);
+        assert_eq!((q.jobs[0].progress, q.jobs[0].output.clone()), (0.0, None));
     }
 
     #[test]

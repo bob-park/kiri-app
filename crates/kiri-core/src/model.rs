@@ -104,18 +104,26 @@ pub struct Job {
     pub id: u64,
     pub url: String,
     pub title: String,
+    #[serde(default)]
     pub thumbnail: Option<String>,
+    #[serde(default)]
     pub duration_secs: Option<f64>,
     /// 화면 표시용 화질 ("1080p60", 오디오만이면 "audio").
+    #[serde(default)]
     pub quality_label: String,
     pub options: JobOptions,
     pub state: JobState,
     /// 현재 단계 기준 0.0~1.0
+    #[serde(default)]
     pub progress: f32,
+    #[serde(default)]
     pub speed: Option<String>,
+    #[serde(default)]
     pub eta: Option<String>,
+    #[serde(default)]
     pub output: Option<PathBuf>,
     /// unix epoch milliseconds
+    #[serde(default)]
     pub created_at: u64,
 }
 

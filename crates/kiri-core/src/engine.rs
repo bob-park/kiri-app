@@ -112,6 +112,19 @@ impl Engine {
     ) -> Engine {
         let mut state = QueueState::load(&paths.queue_file);
         state.recover();
+        // 큐에 없는 작업의 캐시(삭제 도중 종료 등)는 다시 쓰일 일이 없다.
+        if let Ok(dirs) = std::fs::read_dir(paths.cache_dir.join("jobs")) {
+            for d in dirs.flatten() {
+                let listed = d
+                    .file_name()
+                    .to_str()
+                    .and_then(|n| n.parse::<u64>().ok())
+                    .is_some_and(|id| state.jobs.iter().any(|j| j.id == id));
+                if !listed {
+                    let _ = std::fs::remove_dir_all(d.path());
+                }
+            }
+        }
         let engine = Engine(Arc::new(Inner {
             state: Mutex::new(state),
             running: Mutex::new(HashMap::new()),
@@ -846,6 +859,21 @@ mod tests {
         j.url = "--exec=touch /tmp/pwned".into();
         assert!(matches!(e.engine.add(j), Err(EngineError::InvalidUrl)));
         assert!(e.engine.list().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn new_engine_removes_orphan_cache_dirs() {
+        let d = tempfile::tempdir().unwrap();
+        let mut q = QueueState::default();
+        q.add(new_job("a"), 0);
+        q.get_mut(1).unwrap().state = JobState::Stopped;
+        q.save(&d.path().join("data/queue.json")).unwrap();
+        let jobs = d.path().join("cache/jobs");
+        fs::create_dir_all(jobs.join("1")).unwrap();
+        fs::create_dir_all(jobs.join("7")).unwrap();
+        let _engine = engine_at(d.path(), "sleep 30", 1);
+        assert!(jobs.join("1").exists(), "listed job's cache kept");
+        assert!(!jobs.join("7").exists(), "orphan removed");
     }
 
     #[test]
