@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "kiri windows",
+  "windows": ["main", "settings"],
+  "permissions": [
+    "core:default",
+    "opener:allow-reveal-item-in-dir",
+    "dialog:allow-open",
+    "clipboard-manager:allow-read-text"
+  ]
+}

@@ -1,0 +1,25 @@
+[package]
+name = "kiri-app"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "kiri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kiri-core = { path = "../crates/kiri-core" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tokio = { version = "1", features = ["time", "rt"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sys-locale = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

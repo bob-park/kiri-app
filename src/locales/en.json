@@ -1,0 +1,115 @@
+{
+  "app": {
+    "dropHint": "Paste a YouTube link (⌘V) or drop it here",
+    "empty": "No downloads yet",
+    "settings": "Settings",
+    "toolsPreparing": "Preparing yt-dlp…",
+    "toolsFailed": "Couldn't prepare yt-dlp: {{error}}",
+    "retry": "Retry"
+  },
+  "job": {
+    "stop": "Stop",
+    "remove": "Remove",
+    "restart": "Restart",
+    "reveal": "Show in Finder",
+    "subs": "Subs {{langs}}"
+  },
+  "state": {
+    "queued": "Queued",
+    "downloading": "Downloading",
+    "encoding": "Encoding",
+    "completed": "Done",
+    "failed": "Failed",
+    "stopped": "Stopped"
+  },
+  "quality": { "best": "Best", "audio": "Audio only" },
+  "preset": {
+    "original": "Keep original",
+    "mp4-h264": "MP4 · H.264",
+    "mp4-hevc": "MP4 · HEVC",
+    "mov-prores": "MOV · ProRes 422",
+    "webm-vp9": "WebM · VP9",
+    "mp3": "MP3",
+    "m4a": "M4A (AAC)"
+  },
+  "sheet": {
+    "loading": "Reading video info…",
+    "quality": "Quality",
+    "format": "Output format",
+    "subtitles": "Subtitles",
+    "autoSubs": "Auto-generated",
+    "noSubs": "No subtitles available",
+    "remember": "Start right away with these settings next time",
+    "cancel": "Cancel",
+    "download": "Download"
+  },
+  "update": {
+    "available": "kiri {{version}} is available",
+    "install": "Install and restart",
+    "installNow": "Restart now",
+    "afterQueue": "Restart when queue finishes",
+    "scheduled": "kiri will restart when the queue finishes",
+    "downloading": "Downloading update… {{pct}}%"
+  },
+  "settings": {
+    "tab": { "general": "General", "download": "Downloads", "cli": "CLI", "update": "Updates" },
+    "general": {
+      "language": "Language",
+      "langSystem": "System",
+      "langKo": "한국어",
+      "langEn": "English",
+      "langJa": "日本語",
+      "theme": "Theme",
+      "themeSystem": "System",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "closeToTray": "Hide to the menu bar when the window closes",
+      "closeToTrayDesc": "Downloads keep running. Double-click the menu bar icon to reopen."
+    },
+    "download": {
+      "dir": "Save to",
+      "change": "Change…",
+      "quality": "Default quality",
+      "preset": "Default format",
+      "subtitles": "Default subtitles",
+      "subtitlesHint": "Comma separated, e.g. ko,en",
+      "skipSheet": "Start without asking for options",
+      "maxConcurrent": "Simultaneous downloads",
+      "hwAccel": "Use hardware acceleration",
+      "hwAccelDesc": "Encode with VideoToolbox when possible"
+    },
+    "cli": {
+      "status": "Command-line tool",
+      "installed": "Installed at {{path}}",
+      "notInstalled": "Not installed",
+      "install": "Install CLI",
+      "uninstall": "Uninstall",
+      "socketError": "CLI connection unavailable: {{error}}",
+      "usage": "Usage"
+    },
+    "update": {
+      "appVersion": "kiri {{version}}",
+      "check": "Check now",
+      "checking": "Checking…",
+      "upToDate": "You're up to date",
+      "autoCheck": "Check for updates automatically",
+      "ytdlpVersion": "yt-dlp {{version}}",
+      "ytdlpMissing": "yt-dlp not installed",
+      "ytdlpUpdate": "Update now",
+      "lastCheck": "Last checked {{time}}",
+      "never": "never"
+    }
+  },
+  "error": {
+    "invalid_url": "That's not a YouTube link",
+    "ytdlp_missing": "yt-dlp is still being prepared",
+    "not_found": "That job no longer exists",
+    "not_stoppable": "That job isn't running",
+    "not_restartable": "That job can't be restarted",
+    "bad_quality": "Unknown quality",
+    "bad_preset": "Unknown format",
+    "download_dir_unwritable": "Can't write to the download folder",
+    "no_output": "yt-dlp finished but produced no file",
+    "unknown": "Something went wrong"
+  }
+}
