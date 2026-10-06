@@ -1,0 +1,41 @@
+<style>
+  .arch { font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif; font-size:13px; }
+  .arch .grid { display:grid; grid-template-columns: 1fr 1.4fr 1fr; gap:14px; align-items:stretch; }
+  .arch .box { border:1px solid #dedee5; border-radius:12px; padding:12px; background:#fff; color:#101114; }
+  .arch .box h4 { margin:0 0 6px; font-size:13px; }
+  .arch .box.p { border-color:#7132f5; background:rgba(133,91,251,0.06); }
+  .arch .box ul { margin:0; padding-left:16px; color:#484b5e; font-size:12px; line-height:1.6; }
+  .arch .tag { display:inline-block; font-size:10px; font-weight:600; border-radius:6px; padding:1px 6px; background:rgba(104,107,130,0.12); color:#484b5e; margin-bottom:6px; }
+  .arch .tag.p { background:rgba(133,91,251,0.16); color:#5b1ecf; }
+  .arch .arrow { text-align:center; color:#7132f5; font-size:11px; font-weight:600; margin:6px 0; }
+  .arch .col { display:flex; flex-direction:column; gap:10px; }
+</style>
+<h2>섹션 1: 전체 구조</h2>
+<p class="subtitle">kiri-core는 Tauri에 의존하지 않으므로 큐와 파이프라인을 단위 테스트할 수 있습니다. 앱과 CLI는 프로토콜 타입을 공유합니다.</p>
+<div class="arch">
+  <div class="grid">
+    <div class="col">
+      <div class="box"><span class="tag">src/ · React + TS</span><h4>프론트엔드</h4>
+        <ul><li>메인 창: 큐 리스트, ⌘V/드롭</li><li>옵션 시트(화질/포맷/자막)</li><li>환경설정 창(탭)</li><li>i18next ko/en/ja · 테마</li><li>zustand 스토어</li></ul></div>
+      <div class="arrow">↕ invoke / emit("queue://changed")</div>
+      <div class="box"><span class="tag">crates/kiri-cli</span><h4>kiri (CLI)</h4>
+        <ul><li>status · list · add · remove · stop</li><li>--json 출력</li></ul></div>
+      <div class="arrow">↕ Unix socket (JSON lines)</div>
+    </div>
+    <div class="col">
+      <div class="box p"><span class="tag p">src-tauri · Tauri v2</span><h4>kiri 앱 (Rust)</h4>
+        <ul><li>commands.rs: 프론트 ↔ 큐 연결</li><li>ipc_server.rs: 소켓 서버 → 같은 큐 호출</li><li>settings.rs: settings.json</li><li>updater.rs: 앱 업데이트 확인</li></ul></div>
+      <div class="arrow">↓ 사용</div>
+      <div class="box p"><span class="tag p">crates/kiri-core</span><h4>코어 (Tauri 비의존)</h4>
+        <ul><li>queue: Job 상태 머신, 동시 실행 제한, queue.json 영속화</li><li>ytdlp: 메타데이터 조회 · 다운로드 · 진행률 파싱</li><li>ffmpeg: 프리셋별 인코딩 · 진행률</li><li>tools: yt-dlp 설치/업데이트(SHA256 검증)</li><li>protocol: CLI ↔ 앱 요청/응답 타입</li></ul></div>
+    </div>
+    <div class="col">
+      <div class="box"><span class="tag">외부 프로세스</span><h4>yt-dlp</h4>
+        <ul><li>~/Library/Application Support/kiri/bin/</li><li>런타임 설치·갱신</li></ul></div>
+      <div class="box"><span class="tag">sidecar</span><h4>ffmpeg / ffprobe</h4>
+        <ul><li>앱 번들 안 · 함께 서명</li></ul></div>
+      <div class="box"><span class="tag">GitHub Releases</span><h4>업데이트 소스</h4>
+        <ul><li>kiri-app latest.json</li><li>yt-dlp/yt-dlp 최신 릴리즈</li></ul></div>
+    </div>
+  </div>
+</div>

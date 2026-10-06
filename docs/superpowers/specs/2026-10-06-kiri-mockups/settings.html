@@ -1,0 +1,100 @@
+<style>
+  .k { font-family:"IBM Plex Sans","Helvetica Neue",Helvetica,Arial,sans-serif; border-radius:12px; overflow:hidden; font-size:12px; border:1px solid var(--bd); box-shadow:rgba(0,0,0,0.08) 0 4px 24px; background:var(--bg); color:var(--fg); }
+  .k * { box-sizing:border-box; }
+  .light { --bg:#fff; --bg2:#f6f6f9; --fg:#101114; --mut:#9497a9; --bd:#dedee5; --ac:#7132f5; --acs:rgba(133,91,251,0.16); --act:#5b1ecf; --row:#f0f0f4; }
+  .dark  { --bg:#16171c; --bg2:#1d1e25; --fg:#ececf2; --mut:#8b8ea3; --bd:#2c2e38; --ac:#8b5cff; --acs:rgba(139,92,255,0.22); --act:#c4b0ff; --row:#23242c; }
+  .k .bar { height:30px; background:var(--bg2); border-bottom:1px solid var(--bd); display:flex; align-items:center; gap:6px; padding:0 10px; }
+  .k .dot { width:10px; height:10px; border-radius:50%; background:var(--bd); }
+  .k .tabs { display:flex; justify-content:center; gap:4px; padding:8px; background:var(--bg2); border-bottom:1px solid var(--bd); }
+  .k .tab { padding:5px 10px; border-radius:10px; text-align:center; color:var(--mut); font-size:11px; }
+  .k .tab b { display:block; font-size:15px; line-height:1.2; }
+  .k .tab.on { background:var(--acs); color:var(--act); font-weight:600; }
+  .k .f { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--row); }
+  .k .f .l { font-weight:500; }
+  .k .f .d { color:var(--mut); font-size:10px; margin-top:1px; }
+  .k .sel { border:1px solid var(--bd); border-radius:8px; padding:4px 8px; font-size:11px; min-width:110px; display:flex; justify-content:space-between; gap:6px; background:var(--bg); }
+  .k .seg { display:flex; border:1px solid var(--bd); border-radius:10px; overflow:hidden; }
+  .k .seg span { padding:4px 9px; font-size:11px; border-right:1px solid var(--bd); }
+  .k .seg span:last-child { border:none; }
+  .k .seg .on { background:var(--ac); color:#fff; font-weight:600; }
+  .k .path { border:1px solid var(--bd); border-radius:8px; padding:4px 8px; font-size:11px; color:var(--mut); max-width:150px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .k .btn-sub { background:var(--acs); color:var(--act); border-radius:12px; padding:4px 9px; font-weight:600; font-size:11px; white-space:nowrap; }
+  .k .btn { background:var(--ac); color:#fff; border-radius:12px; padding:5px 11px; font-weight:600; font-size:11px; }
+  .k .tg { width:28px; height:16px; border-radius:9999px; background:var(--ac); position:relative; }
+  .k .tg::after { content:""; position:absolute; right:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#fff; }
+  .k .side { width:110px; background:var(--bg2); border-right:1px solid var(--bd); padding:10px 6px; }
+  .k .nav { padding:6px 8px; border-radius:8px; color:var(--mut); margin-bottom:2px; }
+  .k .nav.on { background:var(--acs); color:var(--act); font-weight:600; }
+  .k .h { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--mut); padding:12px 14px 4px; }
+  .k .banner { margin:10px 14px 0; border-radius:10px; padding:8px 10px; background:var(--acs); color:var(--act); display:flex; justify-content:space-between; align-items:center; font-size:11px; }
+</style>
+
+<h2>설정 화면: 어떤 구성이 좋을까요?</h2>
+<p class="subtitle">항목: 언어(시스템/한국어/English/日本語), 테마(시스템/라이트/다크), 기본 다운로드 경로, 기본 화질/포맷/자막, 동시 다운로드 수, 자동 업데이트, CLI 설치. 세 번째 목업은 다크 테마 미리보기를 겸합니다.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f3f3f7;">
+      <div class="k light">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="flex:1;text-align:center;font-weight:600;">일반</span></div>
+        <div class="tabs">
+          <div class="tab on"><b>⚙</b>일반</div><div class="tab"><b>⬇</b>다운로드</div><div class="tab"><b>⌘</b>CLI</div><div class="tab"><b>↻</b>업데이트</div>
+        </div>
+        <div class="f"><div><div class="l">언어</div></div><div class="sel"><span>시스템 설정</span><span>▾</span></div></div>
+        <div class="f"><div><div class="l">테마</div></div><div class="seg"><span class="on">시스템</span><span>라이트</span><span>다크</span></div></div>
+        <div class="f"><div><div class="l">메뉴 막대 아이콘</div><div class="d">진행률 표시</div></div><div class="tg"></div></div>
+        <div class="f" style="border:none"><div><div class="l">로그인 시 실행</div></div><div class="tg" style="background:var(--bd)"></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. macOS 표준 탭형 환경설정</h3>
+      <p>⌘, 로 여는 별도 창이고 상단 아이콘 탭(일반/다운로드/CLI/업데이트)으로 나뉩니다. Downie와 대부분의 맥 앱이 이 방식이라 익숙합니다. 탭마다 창 높이가 바뀝니다.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="scroll" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#f3f3f7;">
+      <div class="k light">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="flex:1;text-align:center;font-weight:600;">설정</span></div>
+        <div class="banner"><span>↻ 새 버전 0.2.0 사용 가능</span><span class="btn">설치 후 재시작</span></div>
+        <div class="h">일반</div>
+        <div class="f"><div class="l">언어</div><div class="sel"><span>시스템 설정</span><span>▾</span></div></div>
+        <div class="f"><div class="l">테마</div><div class="seg"><span class="on">시스템</span><span>라이트</span><span>다크</span></div></div>
+        <div class="h">다운로드</div>
+        <div class="f"><div class="l">저장 위치</div><div style="display:flex;gap:6px;align-items:center;"><div class="path">~/Movies/kiri</div><span class="btn-sub">변경…</span></div></div>
+        <div class="f"><div class="l">기본 포맷</div><div class="sel"><span>원본 유지</span><span>▾</span></div></div>
+        <div class="f" style="border:none"><div class="l">동시 다운로드</div><div class="sel" style="min-width:50px"><span>2</span><span>▾</span></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 한 페이지 스크롤</h3>
+      <p>섹션 제목으로 구분해 한 페이지에 나열합니다. 항목이 적을 때 가장 빠르게 훑어볼 수 있습니다. 업데이트가 있으면 상단 배너에 표시됩니다.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="sidebar-dark" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px;background:#0d0d10;">
+      <div class="k dark">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div style="display:flex;min-height:200px;">
+          <div class="side">
+            <div class="nav">⚙ 일반</div><div class="nav on">⬇ 다운로드</div><div class="nav">⌘ CLI</div><div class="nav">↻ 업데이트</div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div class="f"><div><div class="l">저장 위치</div><div class="d">완료된 파일이 저장될 폴더</div></div><div style="display:flex;gap:6px;align-items:center;"><div class="path">~/Movies/kiri</div><span class="btn-sub">변경…</span></div></div>
+            <div class="f"><div class="l">기본 화질</div><div class="sel"><span>최고 화질</span><span>▾</span></div></div>
+            <div class="f"><div class="l">기본 포맷</div><div class="sel"><span>MP4 · H.264</span><span>▾</span></div></div>
+            <div class="f"><div class="l">기본 자막</div><div class="sel"><span>ko, en</span><span>▾</span></div></div>
+            <div class="f" style="border:none"><div class="l">동시 다운로드</div><div class="sel" style="min-width:50px"><span>2</span><span>▾</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 사이드바 설정 창 (다크 테마)</h3>
+      <p>System Settings처럼 왼쪽에서 섹션을 고르는 방식입니다. 창 크기가 고정되고, AI 스펙에서 "모델" 섹션을 추가하기 쉽습니다. 다크 토큰은 Kraken 보라를 밝게 조정한 #8b5cff를 씁니다.</p>
+    </div>
+  </div>
+
+</div>

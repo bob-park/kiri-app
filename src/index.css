@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable.css";
+@source not "../docs";
+@plugin "daisyui" { themes: false; exclude: rootcolor; }
+@plugin "daisyui/theme" {
+  name: "kiri"; color-scheme: dark;
+  --color-base-100: #16171c; --color-base-200: #1d1e25; --color-base-300: #2c2e38; --color-base-content: #ececf2;
+  --color-neutral: #1d1e25; --color-neutral-content: #ececf2;
+  --color-primary: #8b5cff; --color-primary-content: #ffffff;
+  --color-secondary: rgba(139, 92, 255, 0.22); --color-secondary-content: #c4b0ff;
+  --color-accent: #8b5cff; --color-accent-content: #ffffff;
+  --color-info: #9b7cff; --color-info-content: #101114;
+  --color-success: #4cd393; --color-success-content: #101114;
+  --color-warning: #fbbf24; --color-warning-content: #101114;
+  --color-error: #f3727f; --color-error-content: #101114;
+  --radius-box: 12px; --radius-field: 12px; --radius-selector: 6px;
+  --size-field: 0.25rem; --size-selector: 0.25rem; --border: 1px; --depth: 0; --noise: 0;
+}
+@plugin "daisyui/theme" {
+  name: "kiri-light"; default: true; color-scheme: light;
+  --color-base-100: #ffffff; --color-base-200: #f6f6f9; --color-base-300: #dedee5; --color-base-content: #101114;
+  --color-neutral: #f6f6f9; --color-neutral-content: #101114;
+  --color-primary: #7132f5; --color-primary-content: #ffffff;
+  --color-secondary: rgba(133, 91, 251, 0.16); --color-secondary-content: #5b1ecf;
+  --color-accent: #7132f5; --color-accent-content: #ffffff;
+  --color-info: #5741d8; --color-info-content: #ffffff;
+  --color-success: #149e61; --color-success-content: #ffffff;
+  --color-warning: #f59e0b; --color-warning-content: #101114;
+  --color-error: #d33a4a; --color-error-content: #ffffff;
+  --radius-box: 12px; --radius-field: 12px; --radius-selector: 6px;
+  --size-field: 0.25rem; --size-selector: 0.25rem; --border: 1px; --depth: 0; --noise: 0;
+}
+
+@theme {
+  --color-fg-muted: #8b8ea3;
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, "Hiragino Sans", sans-serif;
+}
+[data-theme="kiri-light"] { --color-fg-muted: #9497a9; }
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--color-base-100); color: var(--color-base-content); font-family: var(--font-sans); font-size: 14px; -webkit-user-select: none; user-select: none; }
