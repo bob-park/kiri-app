@@ -61,6 +61,18 @@ pub fn make_part_dir(dir: &Path) -> io::Result<()> {
     fs::write(dir.join(PART_MARKER), b"")
 }
 
+/// kiri 가 만든 패키지인가: 확장자 kiripart, 심볼릭 링크가 아닌 실제 폴더, 안에 표식 파일.
+pub fn is_part_dir(dir: &Path) -> bool {
+    dir.extension().is_some_and(|x| x == PART_EXT)
+        && fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir())
+        && fs::symlink_metadata(dir.join(PART_MARKER)).is_ok_and(|m| m.is_file())
+}
+
+/// 패키지를 지운다. 사용자 폴더 안이므로 `is_part_dir` 인 것만 지운다. 지웠으면 true.
+pub fn remove_part_dir(dir: &Path) -> bool {
+    is_part_dir(dir) && fs::remove_dir_all(dir).is_ok()
+}
+
 /// 폴더를 만들고 실제로 파일을 써 본다.
 pub fn check_writable(dir: &Path) -> io::Result<()> {
     fs::create_dir_all(dir)?;
@@ -163,6 +175,24 @@ mod tests {
         make_part_dir(&p).unwrap();
         assert!(p.join(PART_MARKER).is_file());
         assert_eq!(find_media(&p).unwrap(), None);
+    }
+
+    #[test]
+    fn remove_part_dir_only_removes_marked_real_kiripart_dirs() {
+        let d = tempfile::tempdir().unwrap();
+        let marked = d.path().join("a.kiripart");
+        make_part_dir(&marked).unwrap();
+        let unmarked = d.path().join("b.kiripart");
+        fs::create_dir(&unmarked).unwrap();
+        let other = d.path().join("c");
+        make_part_dir(&other).unwrap();
+        let link = d.path().join("l.kiripart");
+        std::os::unix::fs::symlink(&marked, &link).unwrap();
+        assert!(!remove_part_dir(&unmarked) && unmarked.exists());
+        assert!(!remove_part_dir(&other) && other.exists());
+        assert!(!remove_part_dir(&link) && marked.exists());
+        assert!(!remove_part_dir(&d.path().join("missing.kiripart")));
+        assert!(remove_part_dir(&marked) && !marked.exists());
     }
 
     #[test]

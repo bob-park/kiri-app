@@ -238,7 +238,7 @@ mod tests {
             tools: testutil::tools(&bin, ytdlp, ffmpeg),
             hw_accel: hw,
             download_dir: d.path().join("Movies/kiri"),
-            work_dir: d.path().join("cache/jobs/1"),
+            work_dir: d.path().join("Movies/kiri/Fake Video.kiripart"),
             log_path: d.path().join("logs/1.log"),
         };
         Env { _d: d, cfg }

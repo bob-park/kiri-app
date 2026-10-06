@@ -111,22 +111,23 @@ impl Engine {
         rt: Handle,
         listener: impl Fn(&[Job]) + Send + Sync + 'static,
     ) -> Engine {
-        let mut state = QueueState::load(&paths.queue_file);
+        let (mut state, trusted) = QueueState::load_checked(&paths.queue_file);
         state.recover();
         // 예전 버전의 작업 캐시. 받던 작업은 처음부터 다시 받는다.
         let _ = std::fs::remove_dir_all(paths.cache_dir.join("jobs"));
         // 큐에 없는 패키지(삭제 도중 종료 등)는 다시 쓰일 일이 없다. 표식이 있는 것만 지운다.
-        if let Ok(entries) = std::fs::read_dir(&config.download_dir) {
+        // 큐 파일이 손상됐으면 어떤 패키지가 쓰이는지 모르므로 건드리지 않는다.
+        if trusted && let Ok(entries) = std::fs::read_dir(&config.download_dir) {
+            let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+            let listed: Vec<PathBuf> = state
+                .jobs
+                .iter()
+                .filter_map(|j| j.work_dir.as_deref().map(canon))
+                .collect();
             for e in entries.flatten() {
                 let p = e.path();
-                let ours = p.extension().is_some_and(|x| x == files::PART_EXT)
-                    && p.join(files::PART_MARKER).is_file();
-                let listed = state
-                    .jobs
-                    .iter()
-                    .any(|j| j.work_dir.as_deref() == Some(p.as_path()));
-                if ours && !listed {
-                    let _ = std::fs::remove_dir_all(&p);
+                if !listed.contains(&canon(&p)) {
+                    files::remove_part_dir(&p);
                 }
             }
         }
@@ -300,7 +301,7 @@ impl Engine {
         match (token, job.work_dir) {
             (Some(t), _) => t.cancel(), // 작업 태스크가 끝나면서 패키지를 지운다
             (None, Some(dir)) => {
-                let _ = std::fs::remove_dir_all(dir);
+                files::remove_part_dir(&dir);
             }
             (None, None) => {}
         }
@@ -388,28 +389,34 @@ impl Engine {
                 let job = st.get_mut(id).expect("queued job exists");
                 job.state = JobState::Downloading;
                 job.progress = 0.0;
-                if job.work_dir.is_none() {
-                    let dir = files::unique_path(
-                        &cfg.download_dir,
-                        &format!("{}.{}", files::safe_title(&job.title), files::PART_EXT),
-                    );
-                    // 바로 만들어 이름을 선점한다(같은 제목의 다음 작업이 다른 이름을 받게).
-                    // 실패는 pipeline 이 저장 폴더 오류로 보고한다.
-                    let _ = files::make_part_dir(&dir);
-                    job.work_dir = Some(dir);
-                }
+                // 저장된 패키지가 없거나(지워짐·만들지 못함) 표식이 없으면 지금 저장 폴더에 새로 만든다.
+                let work_dir = match &job.work_dir {
+                    Some(d) if files::is_part_dir(d) => d.clone(),
+                    _ => {
+                        let dir = files::unique_path(
+                            &cfg.download_dir,
+                            &format!("{}.{}", files::safe_title(&job.title), files::PART_EXT),
+                        );
+                        // 바로 만들어 이름을 선점한다(같은 제목의 다음 작업이 다른 이름을 받게).
+                        // 실패하면 저장하지 않고, pipeline 이 저장 폴더 오류로 보고한다.
+                        if files::make_part_dir(&dir).is_ok() {
+                            job.work_dir = Some(dir.clone());
+                        }
+                        dir
+                    }
+                };
                 let job = job.clone();
                 let token = CancellationToken::new();
                 running.insert(id, token.clone());
-                (job, token)
+                (job, token, work_dir)
             };
             self.save();
             self.notify();
-            self.spawn_job(next.0, next.1);
+            self.spawn_job(next.0, next.1, next.2);
         }
     }
 
-    fn spawn_job(&self, job: Job, token: CancellationToken) {
+    fn spawn_job(&self, job: Job, token: CancellationToken, work_dir: PathBuf) {
         let me = self.clone();
         self.0.rt.spawn(async move {
             let cfg = me.config();
@@ -417,7 +424,7 @@ impl Engine {
                 tools: me.0.tools.clone(),
                 hw_accel: cfg.hw_accel,
                 download_dir: cfg.download_dir,
-                work_dir: job.work_dir.clone().expect("pump assigns work_dir"),
+                work_dir,
                 log_path: me.0.paths.log_dir.join(format!("{}.log", job.id)),
             };
             let id = job.id;
@@ -481,7 +488,7 @@ impl Engine {
         };
         // 중지·실패는 패키지를 남겨 재시작 때 이어 받는다.
         if let Some(dir) = work_dir.filter(|_| !still_listed || result.is_ok()) {
-            let _ = std::fs::remove_dir_all(dir);
+            files::remove_part_dir(dir);
         }
         self.0.running.lock().unwrap().remove(&id);
         self.save();
@@ -642,6 +649,64 @@ mod tests {
         let saved = QueueState::load(&e.d.path().join("data/queue.json"));
         assert_eq!(saved.jobs[0].work_dir.as_deref(), Some(wd.as_path()));
         e.engine.stop(1).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restart_after_package_deleted_gets_fresh_path_in_current_dir() {
+        let e = env("sleep 30", 2);
+        e.engine.add(new_job("a")).unwrap();
+        let wd = work_dir_of(&e.engine, 1);
+        e.engine.stop(1).unwrap();
+        wait_for(&e.engine, |_| e.engine.0.running.lock().unwrap().is_empty()).await;
+        fs::remove_dir_all(&wd).unwrap();
+        let mut cfg = e.engine.config();
+        cfg.download_dir = e.d.path().join("Elsewhere");
+        e.engine.set_config(cfg);
+        e.engine.restart(1).unwrap();
+        let fresh = work_dir_of(&e.engine, 1);
+        assert_eq!(fresh, e.d.path().join("Elsewhere/a.kiripart"));
+        assert!(fresh.join(".kiri").is_file());
+        e.engine.stop(1).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn job_with_missing_old_download_dir_gets_new_path() {
+        let d = tempfile::tempdir().unwrap();
+        let mut q = QueueState::default();
+        q.add(new_job("a"), 0);
+        q.get_mut(1).unwrap().state = JobState::Stopped;
+        q.get_mut(1).unwrap().work_dir = Some(d.path().join("Gone/a.kiripart"));
+        q.save(&d.path().join("data/queue.json")).unwrap();
+        let engine = engine_at(d.path(), "sleep 30", 1);
+        engine.start();
+        engine.restart(1).unwrap();
+        assert_eq!(
+            work_dir_of(&engine, 1),
+            d.path().join("Movies/kiri/a.kiripart")
+        );
+        engine.stop(1).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remove_stopped_job_deletes_package() {
+        let e = env("sleep 30", 2);
+        e.engine.add(new_job("a")).unwrap();
+        let wd = work_dir_of(&e.engine, 1);
+        e.engine.stop(1).unwrap();
+        // 태스크가 완전히 끝나 idle 상태에서 지우는 경로를 탄다.
+        wait_for(&e.engine, |_| e.engine.0.running.lock().unwrap().is_empty()).await;
+        assert!(wd.exists());
+        e.engine.remove(1).unwrap();
+        assert!(!wd.exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn failed_job_keeps_package() {
+        let e = env("echo 'ERROR: boom' >&2; exit 1", 2);
+        e.engine.add(new_job("a")).unwrap();
+        let wd = work_dir_of(&e.engine, 1);
+        wait_for(&e.engine, |j| matches!(j[0].state, JobState::Failed(_))).await;
+        assert!(wd.join(".kiri").is_file());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -964,6 +1029,39 @@ mod tests {
         );
         assert!(!orphan.exists(), "orphan package removed");
         assert!(unmarked.exists(), "package without marker is never deleted");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn orphan_cleanup_matches_referenced_paths_case_insensitively() {
+        let d = tempfile::tempdir().unwrap();
+        let kiri = d.path().join("Movies/kiri");
+        let pkg = kiri.join("s.kiripart");
+        files::make_part_dir(&pkg).unwrap();
+        let other_case = d.path().join("MOVIES/KIRI/s.kiripart");
+        if !other_case.exists() {
+            return; // 대소문자를 구분하는 파일 시스템에서는 확인할 수 없다
+        }
+        let mut q = QueueState::default();
+        q.add(new_job("s"), 0);
+        q.get_mut(1).unwrap().state = JobState::Stopped;
+        q.get_mut(1).unwrap().work_dir = Some(other_case);
+        q.save(&d.path().join("data/queue.json")).unwrap();
+        let _engine = engine_at(d.path(), "sleep 30", 1);
+        assert!(pkg.exists(), "referenced package kept despite path casing");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn corrupt_queue_skips_orphan_cleanup() {
+        let d = tempfile::tempdir().unwrap();
+        let pkg = d.path().join("Movies/kiri/s.kiripart");
+        files::make_part_dir(&pkg).unwrap();
+        fs::create_dir_all(d.path().join("data")).unwrap();
+        fs::write(d.path().join("data/queue.json"), "{nope").unwrap();
+        let _engine = engine_at(d.path(), "sleep 30", 1);
+        assert!(
+            pkg.exists(),
+            "corrupt queue must not wipe partial downloads"
+        );
     }
 
     #[test]

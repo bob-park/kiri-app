@@ -65,24 +65,33 @@ impl QueueState {
     }
 
     pub fn load(path: &Path) -> QueueState {
-        let mut q: QueueState = match fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
-                // 다음 save 가 덮어쓰기 전에 손상된 파일을 남겨 둔다.
-                eprintln!("kiri queue: parse error, moved to .bad, starting empty: {e}");
-                let _ = fs::rename(path, path.with_extension("json.bad"));
-                QueueState::default()
-            }),
+        Self::load_checked(path).0
+    }
+
+    /// 두 번째 값은 파일을 믿을 수 있는지(정상이거나 아직 없음). 손상·읽기 오류면 false.
+    pub fn load_checked(path: &Path) -> (QueueState, bool) {
+        let (mut q, trusted): (QueueState, bool) = match fs::read_to_string(path) {
+            Ok(text) => match serde_json::from_str(&text) {
+                Ok(q) => (q, true),
+                Err(e) => {
+                    // 다음 save 가 덮어쓰기 전에 손상된 파일을 남겨 둔다.
+                    eprintln!("kiri queue: parse error, moved to .bad, starting empty: {e}");
+                    let _ = fs::rename(path, path.with_extension("json.bad"));
+                    (QueueState::default(), false)
+                }
+            },
             Err(e) => {
-                if e.kind() != io::ErrorKind::NotFound {
+                let missing = e.kind() == io::ErrorKind::NotFound;
+                if !missing {
                     eprintln!("kiri queue: read error, starting empty: {e}");
                 }
-                QueueState::default()
+                (QueueState::default(), missing)
             }
         };
         // 손상된 next_id 보정. 빈 목록이면 0 그대로 두고 add 가 1 부터 센다.
         let min_next = q.jobs.iter().map(|j| j.id + 1).max().unwrap_or(0);
         q.next_id = q.next_id.max(min_next);
-        q
+        (q, trusted)
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -181,7 +190,10 @@ mod tests {
         );
         let bad = d.path().join("bad.json");
         fs::write(&bad, "{nope").unwrap();
-        assert_eq!(QueueState::load(&bad), QueueState::default());
+        assert_eq!(
+            QueueState::load_checked(&bad),
+            (QueueState::default(), false)
+        );
         assert!(!bad.exists());
         assert_eq!(
             fs::read_to_string(d.path().join("bad.json.bad")).unwrap(),
