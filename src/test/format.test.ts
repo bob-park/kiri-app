@@ -6,7 +6,7 @@ const t = (k: string, o?: Record<string, unknown>) => (o && "langs" in o ? `Subs
 const job = (state: JobState, extra: Partial<Job> = {}): Job => ({
   id: 1, url: "u", title: "t", thumbnail: null, duration_secs: null, quality_label: "1080p60",
   options: { format_id: "299", preset: "mp4-h264", subtitles: ["ko"], auto_subtitles: false },
-  state, progress: 0.48, speed: "2.1MiB/s", eta: "00:12", output: null, created_at: 0, ...extra,
+  state, progress: 0.48, speed: "2.1 MB/s", eta: "00:12", output: null, created_at: 0, ...extra,
 });
 
 describe("format", () => {
@@ -20,7 +20,7 @@ describe("format", () => {
     expect(formatDuration(null)).toBe("");
   });
   it("describes a downloading job", () => {
-    expect(jobDetail(job({ kind: "downloading" }), t)).toBe("1080p60 · preset.mp4-h264 · Subs ko · 48% · 2.1MiB/s · 00:12");
+    expect(jobDetail(job({ kind: "downloading" }), t)).toBe("1080p60 · preset.mp4-h264 · Subs ko · 48% · 2.1 MB/s · 00:12");
   });
   it("describes audio, encoding and failure", () => {
     expect(jobDetail(job({ kind: "encoding" }, { quality_label: "audio", options: { format_id: null, preset: "mp3", subtitles: [], auto_subtitles: false } }), t))

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
-pub const PROGRESS_TEMPLATE: &str = "download:KIRI|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress.fragment_index)s|%(progress.fragment_count)s";
+pub const PROGRESS_TEMPLATE: &str = "download:KIRI|%(progress._percent_str)s|%(progress.speed)s|%(progress._eta_str)s|%(progress.fragment_index)s|%(progress.fragment_count)s";
 
 const HOSTS: [&str; 5] = [
     "youtube.com",
@@ -279,7 +279,11 @@ pub fn parse_progress(line: &str) -> Option<Progress> {
             .filter(|s| !s.is_empty() && !s.starts_with("Unknown") && *s != "N/A" && *s != "NA")
             .map(String::from)
     };
-    let speed = clean(parts.next());
+    // 속도는 바이트/초 원시값으로 받아 MB/s(1,000,000 단위)로 표시한다.
+    let speed = parts
+        .next()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .map(|bps| format!("{:.1} MB/s", bps / 1_000_000.0));
     let eta = clean(parts.next());
     let num = |s: Option<&str>| s.and_then(|s| s.trim().parse::<u32>().ok());
     let fraction = match (num(parts.next()), num(parts.next())) {
@@ -521,9 +525,17 @@ mod tests {
 
     #[test]
     fn parses_progress_lines() {
-        let p = parse_progress("KIRI|  45.3%|   2.10MiB/s|00:12").unwrap();
+        let p = parse_progress("KIRI|  45.3%|2202009.6|00:12").unwrap();
         assert!((p.fraction - 0.453).abs() < 1e-4);
-        assert_eq!(p.speed.as_deref(), Some("2.10MiB/s"));
+        assert_eq!(p.speed.as_deref(), Some("2.2 MB/s"));
+        assert_eq!(
+            parse_progress("KIRI|1.0%|450000|00:12")
+                .unwrap()
+                .speed
+                .as_deref(),
+            Some("0.5 MB/s")
+        );
+        assert_eq!(parse_progress("KIRI|1.0%|NA|00:12").unwrap().speed, None);
         assert_eq!(p.eta.as_deref(), Some("00:12"));
         let done = parse_progress("KIRI|100.0%|Unknown B/s|NA").unwrap();
         assert_eq!((done.fraction, done.speed, done.eta), (1.0, None, None));
@@ -534,11 +546,11 @@ mod tests {
     #[test]
     fn fragment_counts_win_over_estimated_percent() {
         // HLS: 퍼센트는 추정 크기로 계산돼 출렁인다. 조각 수가 있으면 그것을 쓴다.
-        let p = parse_progress("KIRI| 21.7%|1.0MiB/s|00:10|10|41").unwrap();
+        let p = parse_progress("KIRI| 21.7%|1000000|00:10|10|41").unwrap();
         assert!((p.fraction - 10.0 / 41.0).abs() < 1e-4);
         let manifest = parse_progress("KIRI|100.0%|Unknown B/s|NA|0|41").unwrap();
         assert_eq!(manifest.fraction, 0.0);
-        let plain = parse_progress("KIRI| 45.3%|1.0MiB/s|00:10|NA|NA").unwrap();
+        let plain = parse_progress("KIRI| 45.3%|1000000|00:10|NA|NA").unwrap();
         assert!((plain.fraction - 0.453).abs() < 1e-4);
     }
 
@@ -549,11 +561,11 @@ mod tests {
         let lines = [
             "[download] Destination: /tmp/v.f625.mp4",
             "KIRI|100.0%|Unknown B/s|NA|0|41",
-            "KIRI| 10.6%|1MiB/s|00:30|1|41",
-            "KIRI|  5.5%|1MiB/s|00:30|1|41",
-            "KIRI| 25.2%|1MiB/s|00:20|9|41",
-            "KIRI| 21.7%|1MiB/s|00:20|10|41",
-            "KIRI| 26.8%|1MiB/s|00:19|10|41",
+            "KIRI| 10.6%|1000000|00:30|1|41",
+            "KIRI|  5.5%|1000000|00:30|1|41",
+            "KIRI| 25.2%|1000000|00:20|9|41",
+            "KIRI| 21.7%|1000000|00:20|10|41",
+            "KIRI| 26.8%|1000000|00:19|10|41",
         ];
         let shown: Vec<f32> = lines
             .iter()
@@ -570,25 +582,29 @@ mod tests {
         let mut t = ProgressTracker::new(1);
         assert!(t.feed("[download] Destination: /tmp/v.ko.vtt").is_none());
         assert!(
-            t.feed("KIRI|100.0%|1MiB/s|00:00").is_none(),
+            t.feed("KIRI|100.0%|1000000|00:00").is_none(),
             "subtitle progress ignored"
         );
         t.feed("[download] Destination: /tmp/v.mp4");
-        assert_eq!(t.feed("KIRI| 50.0%|1MiB/s|00:01").unwrap().fraction, 0.5);
-        let back = t.feed("KIRI| 40.0%|2MiB/s|00:02").unwrap();
+        assert_eq!(t.feed("KIRI| 50.0%|1000000|00:01").unwrap().fraction, 0.5);
+        let back = t.feed("KIRI| 40.0%|2000000|00:02").unwrap();
         assert_eq!(back.fraction, 0.5);
-        assert_eq!(back.speed.as_deref(), Some("2MiB/s"), "speed still updates");
+        assert_eq!(
+            back.speed.as_deref(),
+            Some("2.0 MB/s"),
+            "speed still updates"
+        );
     }
 
     #[test]
     fn tracker_maps_video_then_audio_streams() {
         let mut t = ProgressTracker::new(2);
         t.feed("[download] Destination: /tmp/v.f625.mp4");
-        assert!((t.feed("KIRI|100.0%|1MiB/s|00:00").unwrap().fraction - 0.95).abs() < 1e-4);
+        assert!((t.feed("KIRI|100.0%|1000000|00:00").unwrap().fraction - 0.95).abs() < 1e-4);
         t.feed("[download] Destination: /tmp/v.f251.webm");
-        assert!((t.feed("KIRI|  0.0%|1MiB/s|00:01").unwrap().fraction - 0.95).abs() < 1e-4);
-        assert!((t.feed("KIRI| 50.0%|1MiB/s|00:01").unwrap().fraction - 0.975).abs() < 1e-4);
-        assert!((t.feed("KIRI|100.0%|1MiB/s|00:00").unwrap().fraction - 1.0).abs() < 1e-4);
+        assert!((t.feed("KIRI|  0.0%|1000000|00:01").unwrap().fraction - 0.95).abs() < 1e-4);
+        assert!((t.feed("KIRI| 50.0%|1000000|00:01").unwrap().fraction - 0.975).abs() < 1e-4);
+        assert!((t.feed("KIRI|100.0%|1000000|00:00").unwrap().fraction - 1.0).abs() < 1e-4);
     }
 
     #[test]

@@ -210,7 +210,7 @@ mod tests {
             },
             state,
             progress,
-            speed: Some("2.1MiB/s".into()),
+            speed: Some("2.1 MB/s".into()),
             eta: Some("00:12".into()),
             output: None,
             created_at: 0,
@@ -230,11 +230,11 @@ mod tests {
         );
         assert_eq!(
             lines[1],
-            "1   downloading  48%       2.1MiB/s  00:12  Rust in 100 Seconds"
+            "1   downloading  48%       2.1 MB/s  00:12  Rust in 100 Seconds"
         );
         assert_eq!(
             lines[2],
-            "12  failed       0%        2.1MiB/s  00:12  Rust in 100 Seconds (boom)"
+            "12  failed       0%        2.1 MB/s  00:12  Rust in 100 Seconds (boom)"
         );
     }
 

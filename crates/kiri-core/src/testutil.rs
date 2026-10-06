@@ -18,10 +18,10 @@ pub const FAKE_YTDLP_DOWNLOAD: &str = r#"out=""
 while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift;; esac; shift; done
 dir=$(dirname "$out")
 echo "[download] Destination: $dir/Fake Video.mp4"
-echo "KIRI|  50.0%|  1.00MiB/s|00:01"
+echo "KIRI|  50.0%|1048576|00:01"
 : > "$dir/Fake Video.mp4"
 : > "$dir/Fake Video.ko.srt"
-echo "KIRI|100.0%|  1.00MiB/s|00:00""#;
+echo "KIRI|100.0%|1048576|00:00""#;
 
 /// 마지막 인자(출력 경로)에 파일을 만든다.
 pub const FAKE_FFMPEG: &str = r#"for a; do last="$a"; done

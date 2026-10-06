@@ -841,7 +841,7 @@ mod tests {
         let j = q.get_mut(1).unwrap();
         j.state = JobState::Failed("x".into());
         j.output = Some("/old.mp4".into());
-        j.speed = Some("1MiB/s".into());
+        j.speed = Some("1.0 MB/s".into());
         j.eta = Some("00:01".into());
         q.save(&d.path().join("data/queue.json")).unwrap();
         let engine = engine_at(d.path(), "sleep 30", 1);
