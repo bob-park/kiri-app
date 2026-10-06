@@ -37,36 +37,47 @@ export default function MainWindow() {
   const jobs = useQueue((s) => s.jobs);
   const [sheet, setSheet] = useState<SheetState | null>(null);
   // 시트가 열려 있으면 ⌘V·드롭을 무시한다(열린 시트를 덮어쓰지 않게). keydown effect가 낡지 않도록 ref로 읽는다.
-  const sheetOpen = useRef(false);
-  sheetOpen.current = sheet !== null;
+  const sheetUrl = useRef<string | null>(null);
+  sheetUrl.current = sheet?.url ?? null;
+  // 앞선 붙여넣기(readText·addUrl·probe)가 끝나기 전의 두 번째 요청은 무시한다(중복 작업 방지).
+  const inFlight = useRef(false);
 
-  const submit = useCallback(async (raw: string | null | undefined) => {
-    const url = extractUrl(raw);
-    if (!url) return showError({ code: "invalid_url" });
-    if (!useTools.getState().status?.ready) return showError({ code: "ytdlp_missing" });
-    if (useSettings.getState().settings?.download.skip_sheet) {
-      return api.addUrl(url).then(() => undefined, showError);
-    }
-    setSheet({ url, info: null });
+  const submit = useCallback(async (source: string | null | Promise<string | null>) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
-      const info = await api.probe(url);
-      setSheet((cur) => (cur?.url === url ? { url, info } : cur));
-    } catch (e) {
-      setSheet(null);
-      showError(e);
+      const url = extractUrl(await source);
+      if (!url) return showError({ code: "invalid_url" });
+      if (!useTools.getState().status?.ready) return showError({ code: "ytdlp_missing" });
+      if (useSettings.getState().settings?.download.skip_sheet) {
+        return await api.addUrl(url).then(() => undefined, showError);
+      }
+      setSheet({ url, info: null });
+      try {
+        const info = await api.probe(url);
+        setSheet((cur) => (cur?.url === url ? { url, info } : cur));
+      } catch (e) {
+        // 그사이 취소하고 다른 시트를 열었다면 그 시트는 건드리지 않고 오류도 띄우지 않는다.
+        const current = sheetUrl.current === url;
+        setSheet((cur) => (cur?.url === url ? null : cur));
+        if (current) showError(e);
+      }
+    } finally {
+      inFlight.current = false;
     }
   }, []);
 
   useEffect(() => {
-    const onKey = async (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
       if (e.key === ",") {
         e.preventDefault();
         api.openSettings().catch(showError);
       } else if (e.key.toLowerCase() === "v" && !isEditableTarget(e.target)) {
-        if (sheetOpen.current) return;
+        if (sheetUrl.current !== null) return;
         e.preventDefault();
-        submit(await readText().catch(() => null));
+        if (e.repeat) return;
+        submit(readText().catch(() => null));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -75,7 +86,7 @@ export default function MainWindow() {
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
-    if (sheetOpen.current) return;
+    if (sheetUrl.current !== null) return;
     submit(e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain"));
   };
 

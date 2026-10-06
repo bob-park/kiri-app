@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/tauri";
 import { useSettings } from "../lib/settings";
-import { showError } from "../lib/toast";
+import { errorText, showError } from "../lib/toast";
 import { langName } from "../lib/i18n";
 import { formatBytes, formatDuration } from "../lib/format";
 import { buildNewJob, defaultSubtitles, pickDefaultQuality, rememberPatch } from "../lib/sheet";
@@ -31,6 +31,7 @@ export function OptionsSheet({ url, info, onClose }: Props) {
   const [subs, setSubs] = useState<string[]>([]);
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!info) return;
@@ -60,10 +61,12 @@ export function OptionsSheet({ url, info, onClose }: Props) {
   const confirm = async () => {
     if (!info) return;
     setBusy(true);
+    setError(null);
     try {
       await api.addJob(buildNewJob(url, info, quality, preset, subs));
     } catch (e) {
-      showError(e);
+      // 모달 밖 토스트는 inert라 읽히지도 눌리지도 않으니 시트 안에 보여 준다.
+      setError(errorText(e));
       setBusy(false);
       return;
     }
@@ -155,6 +158,8 @@ export function OptionsSheet({ url, info, onClose }: Props) {
               <input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
               {t("sheet.remember")}
             </label>
+
+            {error && <div role="alert" className="alert alert-error mt-3 py-2 text-sm">{error}</div>}
 
             <div className="mt-4 flex justify-end gap-2">
               <button className="btn btn-outline btn-sm" onClick={onClose}>{t("sheet.cancel")}</button>
