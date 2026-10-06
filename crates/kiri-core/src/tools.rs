@@ -2,7 +2,7 @@
 //! reqwest 로 받은 파일엔 quarantine 속성이 없어 Gatekeeper 에 막히지 않는다.
 use crate::runner;
 use sha2::{Digest, Sha256};
-use std::{fs, io, os::unix::fs::PermissionsExt, path::Path};
+use std::{fs, io, os::unix::fs::PermissionsExt, path::Path, time::Duration};
 
 const YTDLP_ASSET: &str = "yt-dlp_macos";
 const YTDLP_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos";
@@ -13,9 +13,13 @@ const DENO_URL: &str =
     "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip";
 const DENO_SUM_URL: &str = "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip.sha256sum";
 
+/// 멈춘 연결이 첫 실행 설치를 영원히 붙잡지 않게 타임아웃을 둔다.
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent(concat!("kiri/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(300)) // 느린 회선의 yt-dlp/Deno 전체 다운로드까지는 허용
+        .https_only(true)
         .build()
         .expect("static client config")
 }
@@ -136,6 +140,12 @@ mod tests {
 
     const H1: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const H2: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+
+    /// 타임아웃·https_only 설정이 빌드 가능한 조합인지(=`expect` 가 터지지 않는지).
+    #[test]
+    fn http_client_builds() {
+        let _ = http_client();
+    }
 
     #[test]
     fn sha256_known_vector() {
