@@ -9,4 +9,5 @@ pub mod queue;
 pub mod runner;
 #[cfg(test)]
 pub(crate) mod testutil;
+pub mod tools;
 pub mod ytdlp;
