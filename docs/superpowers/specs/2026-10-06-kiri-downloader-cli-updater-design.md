@@ -56,7 +56,7 @@ kiri-app/
 
 - 기존 `src/main.rs`와 루트 `[package]`는 workspace 구성으로 대체한다.
 - `kiri-core`는 Tauri에 의존하지 않는다. CLI는 프로토콜 타입만 공유하고, 큐와 파서는 Tauri 없이 테스트한다.
-- 큐의 소유자는 앱 프로세스 하나다. UI(Tauri command)와 CLI(소켓)가 같은 `Queue` 핸들을 호출한다. 큐가 바뀌면 `queue://changed` 이벤트를 프론트엔드로 보낸다.
+- 큐의 소유자는 앱 프로세스 하나다. UI(Tauri command)와 CLI(소켓)가 같은 `Queue` 핸들을 호출한다. 큐가 바뀌면 `queue-changed` 이벤트를 프론트엔드로 보낸다.
 
 ## 4. UI
 
@@ -118,21 +118,25 @@ kiri-app/
   - 창 닫기(빨간 버튼, ⌘W)를 누르면 `CloseRequested`를 막고 창을 `hide()`한다. 이어서 `ActivationPolicy::Accessory`로 바꿔 Dock 아이콘을 숨긴다.
   - 창을 다시 보이면 `Regular`로 바꾼다.
 - `close_to_tray`가 꺼져 있을 때: 창을 닫으면 종료 절차로 간다.
-- 아이콘을 **더블클릭**하면 메인 창을 열고 포커스한다.
-- 단일 클릭이나 우클릭으로 여는 메뉴: "kiri 열기", 실행 중 작업 요약(예: "다운로드 중 2개 · 48%", 비활성 항목), "업데이트 설치"(업데이트가 있을 때만), "업데이트 확인", "종료".
+- 아이콘을 **더블클릭**하면 메인 창을 열고 포커스한다. Tauri는 macOS에서 `TrayIconEvent::DoubleClick`을 내보내지 않는다(babelay `tray.rs`에서 확인). 그래서 왼쪽 클릭(Up) 두 번이 400ms 안에 오면 더블클릭으로 판정한다.
+- 우클릭으로 여는 메뉴(왼쪽 클릭은 더블클릭 판정에 쓰므로 메뉴를 띄우지 않는다): "kiri 열기", 실행 중 작업 요약(예: "다운로드 중 2개 · 48%", 비활성 항목), "업데이트 설치"(업데이트가 있을 때만), "업데이트 확인", "종료".
 - **종료(⌘Q 또는 메뉴):** 실행 중인 작업이 있으면 확인 대화상자를 띄운다. 종료한 작업은 다음 실행 때 이어서 진행한다.
-- **검증 항목:** Tauri v2 `TrayIconEvent::DoubleClick`이 macOS에서 안정적으로 오는지 구현 첫 단계에서 확인한다. 동작하지 않으면 "클릭하면 메뉴, 첫 항목이 열기"로 대체하고 사용자에게 알린다.
+- **검증 항목:** ⌘Q가 `RunEvent::ExitRequested`를 거쳐 종료 확인 대화상자를 띄우는지 수동으로 확인한다.
 
 ## 5. 다운로드 파이프라인 (`kiri-core`)
 
-### 5.1 yt-dlp 관리 (`tools`)
-- 설치 위치: `~/Library/Application Support/kiri/bin/yt-dlp`.
-- **확인 시점:** 앱 시작 시, 그리고 마지막 확인 후 24시간이 지났을 때. 업데이트 탭의 "지금 업데이트"로도 실행한다.
-- **절차:**
-  1. GitHub API `repos/yt-dlp/yt-dlp/releases/latest`의 태그를 로컬 `yt-dlp --version`과 비교한다.
-  2. 다르면 `yt-dlp_macos`와 `SHA2-256SUMS`를 받아 해시를 검증한다.
-  3. `bin/yt-dlp.tmp`로 저장하고 chmod 755를 한 뒤 원자적으로 rename한다.
-- 실행 중인 작업이 있으면 교체를 다음 기회로 미룬다.
+### 5.1 yt-dlp · Deno 관리 (`tools`)
+- 설치 위치: `~/Library/Application Support/org.bobpark.kiri/bin/{yt-dlp,deno}` (Tauri `app_data_dir()/bin`).
+- **Deno가 필요한 이유:** yt-dlp 2025.11.12부터 YouTube를 제대로 받으려면 외부 JS 런타임이 필요하다. 공식 `yt-dlp_macos`에는 `yt-dlp-ejs`가 들어 있으므로, Deno 바이너리만 받아 `--js-runtimes deno:<경로>`로 넘긴다(참고: yt-dlp/yt-dlp#15012).
+- **yt-dlp 갱신:** 앱 시작 시, 그리고 마지막 확인 후 24시간이 지났을 때 확인한다. 업데이트 탭의 "지금 업데이트"로도 실행한다.
+  1. `releases/latest/download/SHA2-256SUMS`를 받아 `yt-dlp_macos`의 해시를 얻는다.
+  2. 설치된 파일의 SHA256이 같으면 최신이므로 끝낸다. GitHub API나 버전 문자열 비교는 쓰지 않는다.
+  3. 다르면 `releases/latest/download/yt-dlp_macos`를 받아 해시를 검증한다.
+  4. `bin/yt-dlp.tmp`로 저장하고 chmod 755를 한 뒤 원자적으로 rename한다.
+- **Deno 설치:** 없을 때만 설치한다(이후 자동 갱신은 하지 않는다).
+  1. `denoland/deno` `releases/latest/download/deno-aarch64-apple-darwin.zip`과 `.zip.sha256sum`을 받아 검증한다.
+  2. `/usr/bin/ditto -x -k`로 압축을 푼다.
+- rename은 실행 중인 프로세스가 이미 연 파일에 영향을 주지 않는다. 그래서 작업이 실행 중이어도 바로 교체한다.
 - reqwest로 받은 파일에는 quarantine 속성이 붙지 않으므로 Gatekeeper에 막히지 않는다.
 
 ### 5.2 probe
@@ -272,8 +276,8 @@ struct Settings {
 5. `gh release create vX.Y.Z`로 dmg, `.app.tar.gz`, `.app.tar.gz.sig`를 올린다.
 6. `node scripts/latest-json.mjs vX.Y.Z`를 실행한다. `.sig`를 내려받아 `darwin-aarch64` 항목으로 `latest.json`을 만들고 `gh release upload --clobber`로 올린다. pubkey가 비어 있으면 중단한다.
 
-- `tauri.conf.json` `bundle.macOS`: `signingIdentity: null`(환경변수에서 읽음), `hardenedRuntime: true`, `entitlements: "entitlements.plist"`, `minimumSystemVersion: "14.2"`. `tauri.macos.conf.json`의 targets는 `["app","dmg"]`.
-- yt-dlp는 번들 밖(Application Support)에서 실행되므로 앱 entitlements에 예외가 필요 없다고 본다. 첫 서명 빌드에서 확인한다.
+- `tauri.conf.json` `bundle.macOS`: `signingIdentity: null`(환경변수에서 읽음), `hardenedRuntime: true`, `minimumSystemVersion: "14.2"`. 앱이 특별한 권한을 쓰지 않으므로 entitlements 파일은 두지 않는다. `tauri.macos.conf.json`의 targets는 `["app","dmg"]`.
+- yt-dlp와 Deno는 번들 밖(Application Support)에서 각자의 서명으로 실행된다. 그래서 앱 entitlements에 예외가 필요 없다고 본다. 첫 서명 빌드에서 확인한다.
 - 위 절차는 `docs/development.md`에 문서로 남긴다.
 
 ## 8. CLI
@@ -289,11 +293,11 @@ enum Request {
     Remove { id: u64 },
     Stop { id: u64 },
 }
-enum Response { Jobs(Vec<Job>), Added(Job), Ok, Error { code: String, message: String } }
+enum Response { Jobs { jobs: Vec<Job> }, Added { job: Job }, Ok, Error { code: String, message: String } }  // #[serde(tag = "type")]
 ```
 
 ### 8.2 서버 (`src-tauri/ipc_server.rs`)
-- 앱 시작 시 `~/Library/Application Support/kiri/kiri.sock`에 바인드한다. 이전 파일이 남아 있으면 지우고 다시 바인드한다. 권한은 0600.
+- 앱 시작 시 `~/Library/Application Support/org.bobpark.kiri/kiri.sock`(환경변수 `KIRI_SOCKET`으로 바꿀 수 있음)에 바인드한다. 먼저 연결을 시도해 보고, 다른 인스턴스가 응답하면 바인드하지 않는다. 응답이 없는 파일만 지우고 다시 바인드한다. 권한은 0600.
 - `Add`는 서버에서 probe를 수행하고 화질을 해석한 뒤 큐에 넣는다.
 - **화질 해석:**
   - `best`: 가장 높은 화질
