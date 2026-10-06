@@ -79,10 +79,13 @@ pub fn relabel_update(app: &AppHandle) {
 
 /// 설정이 저장될 때. 트레이가 아직 없으면 아무것도 하지 않는다.
 pub fn relabel(app: &AppHandle, settings: &Settings) {
+    let l = i18n::labels(i18n::resolve(&settings.general.ui_language));
+    if let Some(w) = app.get_webview_window(crate::windows::SETTINGS) {
+        let _ = w.set_title(l.settings_title);
+    }
     let Some(items) = app.try_state::<TrayItems>() else {
         return;
     };
-    let l = i18n::labels(i18n::resolve(&settings.general.ui_language));
     let _ = items.open.set_text(l.open);
     let _ = items
         .update

@@ -153,15 +153,21 @@ pub fn cli_status(ipc: State<'_, crate::ipc_server::IpcState>) -> CliStatus {
     }
 }
 
-#[tauri::command]
-pub fn install_cli() -> CmdResult<()> {
-    Ok(cli_install::install(
-        &crate::sidecar("kiri-cli"),
-        Path::new(cli_install::LINK),
-    )?)
+/// osascript 암호 창이 떠 있는 동안 메인 스레드를 막지 않도록 블로킹 스레드에서 돈다.
+async fn blocking(f: impl FnOnce() -> Result<(), String> + Send + 'static) -> CmdResult<()> {
+    Ok(tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())??)
 }
 
 #[tauri::command]
-pub fn uninstall_cli() -> CmdResult<()> {
-    Ok(cli_install::uninstall(Path::new(cli_install::LINK))?)
+pub async fn install_cli() -> CmdResult<()> {
+    blocking(|| cli_install::install(&crate::sidecar("kiri-cli"), Path::new(cli_install::LINK)))
+        .await
+}
+
+#[tauri::command]
+pub async fn uninstall_cli() -> CmdResult<()> {
+    blocking(|| cli_install::uninstall(&crate::sidecar("kiri-cli"), Path::new(cli_install::LINK)))
+        .await
 }

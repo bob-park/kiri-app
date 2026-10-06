@@ -29,13 +29,13 @@ export function UpdateTab() {
         </button>
       </Row>
       <Row label={t("settings.update.autoCheck")}>
-        <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={settings!.update.auto_check} onChange={(e) => update({ update: { auto_check: e.target.checked } })} />
+        {(id) => <input type="checkbox" aria-labelledby={id} className="toggle toggle-primary toggle-sm" checked={settings!.update.auto_check} onChange={(e) => update({ update: { auto_check: e.target.checked } })} />}
       </Row>
       <Row
         label={tools?.ytdlp_version ? t("settings.update.ytdlpVersion", { version: tools.ytdlp_version }) : t("settings.update.ytdlpMissing")}
         desc={t("settings.update.lastCheck", { time: last })}
       >
-        <button className="btn btn-sm btn-secondary" disabled={tools?.installing} onClick={() => api.updateTools().catch(showError)}>
+        <button className="btn btn-sm btn-secondary" aria-label={t("settings.update.ytdlpUpdate")} disabled={tools?.installing} onClick={() => api.updateTools().catch(showError)}>
           {tools?.installing ? <span className="loading loading-spinner loading-xs" /> : t("settings.update.ytdlpUpdate")}
         </button>
       </Row>

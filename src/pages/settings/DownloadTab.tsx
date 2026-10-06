@@ -32,34 +32,40 @@ export function DownloadTab() {
         <button className="btn btn-sm btn-secondary" onClick={pickDir}>{t("settings.download.change")}</button>
       </Row>
       <Row label={t("settings.download.quality")}>
-        <select className="select select-sm w-40" value={d.quality} onChange={(e) => update({ download: { quality: e.target.value } })}>
-          {QUALITIES.map((q) => (
-            <option key={q} value={q}>{qLabel(q)}</option>
-          ))}
-        </select>
+        {(id) => (
+          <select aria-labelledby={id} className="select select-sm w-40" value={d.quality} onChange={(e) => update({ download: { quality: e.target.value } })}>
+            {QUALITIES.map((q) => (
+              <option key={q} value={q}>{qLabel(q)}</option>
+            ))}
+          </select>
+        )}
       </Row>
       <Row label={t("settings.download.preset")}>
-        <select className="select select-sm w-40" value={d.preset} onChange={(e) => update({ download: { preset: e.target.value as Preset } })}>
-          {PRESETS.map((p) => (
-            <option key={p} value={p}>{t(`preset.${p}`)}</option>
-          ))}
-        </select>
+        {(id) => (
+          <select aria-labelledby={id} className="select select-sm w-40" value={d.preset} onChange={(e) => update({ download: { preset: e.target.value as Preset } })}>
+            {PRESETS.map((p) => (
+              <option key={p} value={p}>{t(`preset.${p}`)}</option>
+            ))}
+          </select>
+        )}
       </Row>
       <Row label={t("settings.download.subtitles")} desc={t("settings.download.subtitlesHint")}>
-        <input className="input input-sm w-40" value={subs} onChange={(e) => setSubs(e.target.value)} onBlur={commitSubs} onKeyDown={(e) => e.key === "Enter" && commitSubs()} />
+        {(id) => <input aria-labelledby={id} className="input input-sm w-40" value={subs} onChange={(e) => setSubs(e.target.value)} onBlur={commitSubs} onKeyDown={(e) => e.key === "Enter" && commitSubs()} />}
       </Row>
       <Row label={t("settings.download.skipSheet")}>
-        <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={d.skip_sheet} onChange={(e) => update({ download: { skip_sheet: e.target.checked } })} />
+        {(id) => <input type="checkbox" aria-labelledby={id} className="toggle toggle-primary toggle-sm" checked={d.skip_sheet} onChange={(e) => update({ download: { skip_sheet: e.target.checked } })} />}
       </Row>
       <Row label={t("settings.download.maxConcurrent")}>
-        <select className="select select-sm w-20" value={d.max_concurrent} onChange={(e) => update({ download: { max_concurrent: Number(e.target.value) } })}>
-          {[1, 2, 3, 4].map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
+        {(id) => (
+          <select aria-labelledby={id} className="select select-sm w-20" value={d.max_concurrent} onChange={(e) => update({ download: { max_concurrent: Number(e.target.value) } })}>
+            {[1, 2, 3, 4].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        )}
       </Row>
       <Row label={t("settings.download.hwAccel")} desc={t("settings.download.hwAccelDesc")}>
-        <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={d.hw_accel} onChange={(e) => update({ download: { hw_accel: e.target.checked } })} />
+        {(id) => <input type="checkbox" aria-labelledby={id} className="toggle toggle-primary toggle-sm" checked={d.hw_accel} onChange={(e) => update({ download: { hw_accel: e.target.checked } })} />}
       </Row>
     </div>
   );

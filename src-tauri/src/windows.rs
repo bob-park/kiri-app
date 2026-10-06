@@ -52,6 +52,7 @@ pub fn show_main(app: &AppHandle) -> Result<(), String> {
 }
 
 pub fn show_settings(app: &AppHandle) -> Result<(), String> {
+    set_dock_visible(app, true);
     if let Some(w) = app.get_webview_window(SETTINGS) {
         w.show().map_err(|e| e.to_string())?;
         return w.set_focus().map_err(|e| e.to_string());

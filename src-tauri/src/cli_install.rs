@@ -25,16 +25,23 @@ pub fn shell_quote(p: &Path) -> Result<String, String> {
     Ok(format!("'{s}'"))
 }
 
+/// osascript 관리자 암호 창에서 "취소"를 누른 경우.
+fn is_cancel(stderr: &str) -> bool {
+    stderr.contains("(-128)")
+}
+
+/// 사용자가 암호 창을 취소하면 아무 일도 없었던 것으로 본다.
 fn admin(sh: &str) -> Result<(), String> {
     let script = format!("do shell script \"{sh}\" with administrator privileges");
     let out = Command::new("osascript")
         .args(["-e", &script])
         .output()
         .map_err(|e| e.to_string())?;
-    if out.status.success() {
+    let err = String::from_utf8_lossy(&out.stderr);
+    if out.status.success() || is_cancel(&err) {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(err.trim().to_string())
     }
 }
 
@@ -52,7 +59,7 @@ pub fn install(target: &Path, link: &Path) -> Result<(), String> {
         Err(e) if needs_admin(&e) => {
             let dir = link.parent().ok_or("link has no parent")?;
             admin(&format!(
-                "mkdir -p {} && ln -sf {} {}",
+                "mkdir -p {} && ln -sfn {} {}",
                 shell_quote(dir)?,
                 shell_quote(target)?,
                 shell_quote(link)?
@@ -62,7 +69,14 @@ pub fn install(target: &Path, link: &Path) -> Result<(), String> {
     }
 }
 
-pub fn uninstall(link: &Path) -> Result<(), String> {
+/// kiri 가 만든 링크만 지운다. 다른 곳을 가리키는 링크·파일은 건드리지 않는다.
+pub fn uninstall(target: &Path, link: &Path) -> Result<(), String> {
+    if fs::symlink_metadata(link).is_err() {
+        return Ok(());
+    }
+    if !is_installed(target, link) {
+        return Err(format!("{} is not installed by kiri", link.display()));
+    }
     match fs::remove_file(link) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -88,9 +102,24 @@ mod tests {
         install(&target, &link).unwrap();
         assert!(is_installed(&target, &link));
         install(&target, &link).unwrap(); // 다시 설치해도 된다
-        uninstall(&link).unwrap();
+        uninstall(&target, &link).unwrap();
         assert!(!is_installed(&target, &link));
-        uninstall(&link).unwrap(); // 없으면 성공
+        uninstall(&target, &link).unwrap(); // 없으면 성공
+    }
+
+    #[test]
+    fn uninstall_refuses_foreign_link() {
+        let d = tempfile::tempdir().unwrap();
+        let link = d.path().join("kiri");
+        std::os::unix::fs::symlink("/somewhere/else", &link).unwrap();
+        assert!(uninstall(&d.path().join("kiri-cli"), &link).is_err());
+        assert!(fs::symlink_metadata(&link).is_ok());
+    }
+
+    #[test]
+    fn detects_user_cancel() {
+        assert!(is_cancel("0:84: execution error: User canceled. (-128)"));
+        assert!(!is_cancel("0:84: execution error: Permission denied (1)"));
     }
 
     #[test]
