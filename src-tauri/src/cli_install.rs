@@ -48,25 +48,46 @@ fn admin(sh: &str) -> Result<(), String> {
 fn needs_admin(e: &io::Error) -> bool {
     matches!(
         e.kind(),
-        io::ErrorKind::PermissionDenied | io::ErrorKind::NotFound
+        io::ErrorKind::PermissionDenied | io::ErrorKind::NotFound | io::ErrorKind::AlreadyExists
     )
 }
 
+/// 이미 있는 링크가 kiri 것인가: target 을 가리키거나, 앱을 옮겨 낡은 kiri-cli 링크.
+fn is_ours(target: &Path, link: &Path) -> bool {
+    fs::read_link(link).is_ok_and(|p| p == target || p.file_name() == Some("kiri-cli".as_ref()))
+}
+
 pub fn install(target: &Path, link: &Path) -> Result<(), String> {
-    let _ = fs::remove_file(link);
+    if fs::symlink_metadata(link).is_ok() {
+        if !is_ours(target, link) {
+            return Err(format!(
+                "existing {} is not managed by kiri",
+                link.display()
+            ));
+        }
+        if let Err(e) = fs::remove_file(link) {
+            if e.kind() != io::ErrorKind::NotFound {
+                return admin_link(target, link, &e);
+            }
+        }
+    }
     match std::os::unix::fs::symlink(target, link) {
         Ok(()) => Ok(()),
-        Err(e) if needs_admin(&e) => {
-            let dir = link.parent().ok_or("link has no parent")?;
-            admin(&format!(
-                "mkdir -p {} && ln -sfn {} {}",
-                shell_quote(dir)?,
-                shell_quote(target)?,
-                shell_quote(link)?
-            ))
-        }
-        Err(e) => Err(e.to_string()),
+        Err(e) => admin_link(target, link, &e),
     }
+}
+
+fn admin_link(target: &Path, link: &Path, e: &io::Error) -> Result<(), String> {
+    if !needs_admin(e) {
+        return Err(e.to_string());
+    }
+    let dir = link.parent().ok_or("link has no parent")?;
+    admin(&format!(
+        "mkdir -p {} && ln -sfn {} {}",
+        shell_quote(dir)?,
+        shell_quote(target)?,
+        shell_quote(link)?
+    ))
 }
 
 /// kiri 가 만든 링크만 지운다. 다른 곳을 가리키는 링크·파일은 건드리지 않는다.
@@ -114,6 +135,34 @@ mod tests {
         std::os::unix::fs::symlink("/somewhere/else", &link).unwrap();
         assert!(uninstall(&d.path().join("kiri-cli"), &link).is_err());
         assert!(fs::symlink_metadata(&link).is_ok());
+    }
+
+    #[test]
+    fn install_replaces_stale_kiri_cli_link() {
+        let d = tempfile::tempdir().unwrap();
+        let target = d.path().join("kiri-cli");
+        let link = d.path().join("kiri");
+        std::os::unix::fs::symlink("/Old/kiri.app/Contents/MacOS/kiri-cli", &link).unwrap();
+        install(&target, &link).unwrap();
+        assert!(is_installed(&target, &link));
+    }
+
+    #[test]
+    fn install_refuses_foreign_link() {
+        let d = tempfile::tempdir().unwrap();
+        let link = d.path().join("kiri");
+        std::os::unix::fs::symlink("/somewhere/else", &link).unwrap();
+        assert!(install(&d.path().join("kiri-cli"), &link).is_err());
+        assert_eq!(fs::read_link(&link).unwrap(), Path::new("/somewhere/else"));
+    }
+
+    #[test]
+    fn install_refuses_regular_file() {
+        let d = tempfile::tempdir().unwrap();
+        let link = d.path().join("kiri");
+        fs::write(&link, "mine").unwrap();
+        assert!(install(&d.path().join("kiri-cli"), &link).is_err());
+        assert_eq!(fs::read_to_string(&link).unwrap(), "mine");
     }
 
     #[test]
