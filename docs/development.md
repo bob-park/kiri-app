@@ -1,6 +1,6 @@
 # kiri 개발 · 빌드 · 릴리즈
 
-kiri는 **Apple Silicon Mac 전용**이고, 빌드와 릴리즈는 로컬에서 합니다(CI 없음).
+kiri는 **Apple Silicon Mac 전용**이고, 빌드와 릴리즈는 로컬에서 합니다(CI 없음). Windows 빌드는 [7. Windows 빌드](#7-windows-빌드)를 보세요.
 
 ## 1. 개발 환경 구성 (한 번)
 
@@ -147,3 +147,76 @@ echo test > /tmp/t && ( set -a; . ~/.config/kiri/sign.env; set +a;
 
 - 새로 받은 dmg를 열어 Gatekeeper 경고 없이 설치·실행되는지 확인합니다.
 - 이전 버전 앱에서 설정 > 업데이트 > 지금 확인 → 배너 → 설치 후 재시작 → 새 버전으로 바뀌는지 확인합니다.
+
+## 7. Windows 빌드
+
+### 현재 상태: 아직 지원하지 않음
+
+kiri는 macOS 전용으로 설계되어 있어서, **지금 코드는 Windows에서 그대로 빌드되거나 동작하지 않습니다.** Windows 설치 파일을 만들려면 먼저 아래 부분을 Windows용으로 옮겨야 합니다.
+
+| 영역 | 지금 (macOS) | 위치 | Windows에서 필요한 것 |
+|---|---|---|---|
+| 다운로드 중지 | Unix 프로세스 그룹 kill (`process_group`, `killpg`) | `crates/kiri-core/src/runner.rs` | Job Object로 자식 프로세스 트리 종료 |
+| CLI ↔ 앱 통신 | Unix 소켓 (`tokio::net::UnixListener`) | `crates/kiri-core/src/ipc.rs`, `crates/kiri-cli` | Named pipe (`tokio::net::windows::named_pipe`) |
+| 실행 권한·파일 처리 | `PermissionsExt`(chmod), `/usr/bin/ditto`로 zip 풀기 | `crates/kiri-core/src/tools.rs`, `files.rs` | chmod 불필요, zip 풀기는 `zip` 크레이트 등 |
+| 외부 도구 | `yt-dlp_macos`, `deno-aarch64-apple-darwin.zip` | `crates/kiri-core/src/tools.rs` | `yt-dlp.exe`, `deno-x86_64-pc-windows-msvc.zip` |
+| ffmpeg sidecar | martin-riedl.de macOS arm64 빌드 | `scripts/fetch-ffmpeg.sh`, `scripts/ffmpeg.lock` | Windows x64 정적 빌드와 이를 받는 PowerShell 스크립트 |
+| 하드웨어 인코딩 | VideoToolbox (`*_videotoolbox`, `-hwaccel videotoolbox`) | `crates/kiri-core/src/ffmpeg.rs` | NVENC / QSV / AMF 중 선택, 또는 소프트웨어만 |
+| CLI 설치 | `/usr/local/bin/kiri` 링크 + `osascript` 관리자 권한 | `src-tauri/src/cli_install.rs` | 설치 폴더를 사용자 PATH에 추가 |
+| 창·트레이 | 메뉴 막대, Dock 숨기기(activation policy), 앱 메뉴 | `src-tauri/src/windows.rs`, `tray.rs` | 시스템 트레이 (Dock·앱 메뉴 코드는 `#[cfg(target_os = "macos")]`로 분리) |
+| `.kiripart` 표시 | Info.plist 패키지 등록 | `src-tauri/Info.plist` | 같은 개념이 없음 (폴더로 보임) |
+| 기본 경로 | `$HOME/Movies/kiri`, `~/Library/...` | `src-tauri/src/settings.rs`, `ipc.rs` | `%USERPROFILE%\Videos\kiri`, `dirs` 크레이트 |
+| 번들 설정 | `targets: ["app","dmg"]`, macOS 서명 설정 | `src-tauri/tauri.conf.json` | `tauri.windows.conf.json`에 `nsis`, `windows.certificateThumbprint` 등 |
+
+이 작업은 따로 설계(스펙)부터 잡아서 진행하는 것을 권장합니다.
+
+### 옮긴 뒤의 빌드 절차
+
+Tauri의 Windows 설치 파일(NSIS `.exe`, `.msi`)은 **Windows에서 빌드**해야 합니다. macOS에서 교차 빌드(`cargo-xwin`)도 가능은 하지만 실험적이고, 코드 서명은 어차피 Windows 환경이 필요합니다. Windows PC를 쓰거나 GitHub Actions의 `windows-latest` 러너를 씁니다.
+
+**1. 도구 준비 (Windows 10/11 x64)**
+
+| 도구 | 설치 |
+|---|---|
+| Visual Studio Build Tools | "C++를 사용한 데스크톱 개발" 워크로드 (MSVC, Windows SDK) |
+| WebView2 런타임 | Windows 10/11에는 대부분 이미 있음. 없으면 Microsoft에서 설치 |
+| Rust | `rustup` 설치 후 `rustup default stable-msvc` |
+| Node.js 24, Yarn 4 | Node 공식 설치본 + `corepack enable` |
+| Git, GitHub CLI | `winget install Git.Git GitHub.cli` |
+
+**2. 저장소 준비**
+
+```powershell
+git clone https://github.com/bob-park/kiri-app.git
+cd kiri-app
+yarn install
+# ffmpeg/ffprobe Windows 빌드를 src-tauri\binaries\ffmpeg-x86_64-pc-windows-msvc.exe 등으로 준비
+cargo build -p kiri-cli --release
+copy target\release\kiri.exe src-tauri\binaries\kiri-cli-x86_64-pc-windows-msvc.exe
+```
+
+sidecar 이름은 `<이름>-x86_64-pc-windows-msvc.exe` 형식이어야 Tauri가 찾습니다.
+
+**3. 빌드와 서명**
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $HOME\.tauri\kiri.key -Raw   # 업데이트 서명 키 (macOS와 같은 키)
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<업데이트 키 암호>"
+yarn tauri build --bundles nsis
+```
+
+- 결과물은 `target\release\bundle\nsis\kiri_<버전>_x64-setup.exe`와 그 `.sig`(업데이트용)입니다.
+- 코드 서명 없이도 설치는 되지만, SmartScreen 경고가 뜹니다. 서명하려면 코드 서명 인증서(OV/EV) 또는 Azure Trusted Signing을 준비하고, `tauri.windows.conf.json`의 `bundle.windows`(`certificateThumbprint`, `digestAlgorithm`, `timestampUrl` 또는 `signCommand`)에 설정합니다.
+- 업데이트 설치 방식은 `plugins.updater.windows.installMode`(예: `"passive"`)로 정합니다.
+
+**4. 릴리즈와 업데이트 매니페스트**
+
+- macOS와 같은 GitHub Release에 `kiri_<버전>_x64-setup.exe`와 `.sig`를 함께 올립니다.
+- `scripts/latest-json.mjs`의 `PLATFORMS`에 Windows 항목을 추가해야 `latest.json`에 Windows 플랫폼이 들어갑니다.
+  ```js
+  const PLATFORMS = [
+    { suffix: ".app.tar.gz.sig", key: "darwin-aarch64" },
+    { suffix: "-setup.exe.sig", key: "windows-x86_64" },
+  ];
+  ```
+- 두 플랫폼 파일을 모두 올린 뒤 `node scripts/latest-json.mjs v<버전>`을 한 번 실행합니다.

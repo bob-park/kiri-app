@@ -89,6 +89,6 @@ kiri list --json             # 다른 프로그램이 읽기 좋은 JSON 출력
 
 ## 개발
 
-빌드, 개발 환경 구성, 서명, 릴리즈 절차는 [docs/develop.md](docs/develop.md)를 보세요.
+빌드, 개발 환경 구성, 서명, 릴리즈 절차는 [docs/development.md](docs/development.md)를 보세요.
 
 kiri는 [Tauri](https://tauri.app) v2(Rust) + React로 만들었고, 다운로드에는 [yt-dlp](https://github.com/yt-dlp/yt-dlp), 인코딩에는 [FFmpeg](https://ffmpeg.org)를 씁니다.
