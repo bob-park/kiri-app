@@ -13,4 +13,5 @@ export const api = {
   restartJob: (id: number) => invoke<void>("restart_job", { id }),
   toolsStatus: () => invoke<ToolsStatus>("tools_status"),
   updateTools: () => invoke<void>("update_tools"),
+  openSettings: () => invoke<void>("open_settings"),
 };
