@@ -78,6 +78,8 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
     if INSTALLING.swap(true, Ordering::SeqCst) {
         return Err("busy".into());
     }
+    // 지금 설치하므로 남아 있던 "큐가 끝나면" 예약은 버린다.
+    RESTART_AFTER_QUEUE.store(false, Ordering::SeqCst);
     let fail = |e: String| {
         INSTALLING.store(false, Ordering::SeqCst);
         e
@@ -107,27 +109,35 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| fail(e.to_string()))?;
     update.install(bytes).map_err(|e| fail(e.to_string()))?;
     // restart 는 RunEvent::Exit 를 거치지 않을 수 있으므로 여기서 작업을 대기로 되돌리고
-    // yt-dlp·ffmpeg 를 정리한다(최대 2초 블로킹, 곧 재시작하므로 감수한다).
-    app.state::<Engine>()
-        .shutdown_for_exit(Duration::from_secs(2));
+    // yt-dlp·ffmpeg 를 정리한다(최대 2초 블로킹이라 블로킹 스레드에서).
+    let engine = app.state::<Engine>().inner().clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        engine.shutdown_for_exit(Duration::from_secs(2))
+    })
+    .await;
     quit::allow_exit(); // 재시작이 종료 확인에 막히지 않게
     app.restart()
 }
 
 /// after_queue 이고 큐가 남아 있으면 예약만 한다.
+/// 예약을 먼저 걸고 큐를 본다: 사이에 마지막 작업이 끝나도 on_queue_change 나
+/// 여기 중 정확히 한쪽만 swap 으로 예약을 가져가 설치한다.
 pub async fn request_install(app: &AppHandle, after_queue: bool) -> Result<(), String> {
-    if after_queue && !app.state::<Engine>().is_idle() {
+    if after_queue {
         RESTART_AFTER_QUEUE.store(true, Ordering::SeqCst);
         let _ = app.emit("update-scheduled", true);
-        return Ok(());
+        if !(app.state::<Engine>().is_idle() && RESTART_AFTER_QUEUE.swap(false, Ordering::SeqCst)) {
+            return Ok(());
+        }
     }
     install(app).await
 }
 
 /// 큐가 바뀔 때마다. 예약돼 있고 큐가 비면 설치한다.
 pub fn on_queue_change(app: &AppHandle, jobs: &[Job]) {
-    if should_install(RESTART_AFTER_QUEUE.load(Ordering::SeqCst), jobs) {
-        RESTART_AFTER_QUEUE.store(false, Ordering::SeqCst);
+    if should_install(RESTART_AFTER_QUEUE.load(Ordering::SeqCst), jobs)
+        && RESTART_AFTER_QUEUE.swap(false, Ordering::SeqCst)
+    {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = install(&app).await {

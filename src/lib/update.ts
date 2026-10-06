@@ -40,7 +40,7 @@ export const useUpdate = create<UpdateStore>((set) => ({
       await api.installUpdate(afterQueue);
     } catch (e) {
       if (isBusy(e)) return;
-      set({ progress: null });
+      set({ progress: null, scheduled: false });
       showError(e);
     }
   },
@@ -52,7 +52,7 @@ export const useUpdate = create<UpdateStore>((set) => ({
       listen<boolean>("update-scheduled", () => set({ scheduled: true })),
       listen<string>("update-error", (e) => {
         if (isBusy(e.payload)) return;
-        set({ progress: null });
+        set({ progress: null, scheduled: false });
         showError(e.payload);
       }),
     ];
