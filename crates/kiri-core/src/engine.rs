@@ -295,6 +295,9 @@ impl Engine {
             }
             job.state = JobState::Queued;
             job.progress = 0.0;
+            job.output = None;
+            job.speed = None;
+            job.eta = None;
         }
         self.save();
         self.notify();
@@ -425,17 +428,18 @@ impl Engine {
             match st.get_mut(id) {
                 None => false,
                 Some(job) => {
-                    if job.state.is_active() {
-                        match &result {
-                            Ok(path) => {
-                                job.state = JobState::Completed;
-                                job.progress = 1.0;
-                                job.output = Some(path.clone());
-                            }
-                            Err(PipelineError::Cancelled) => job.state = JobState::Stopped,
-                            Err(PipelineError::Failed(msg)) => {
-                                job.state = JobState::Failed(msg.clone())
-                            }
+                    match &result {
+                        // 파일이 실제로 생겼다. 그 사이 중지·종료됐어도 완료로 남겨야
+                        // 재시작이 같은 영상을 또 받지 않는다.
+                        Ok(path) => {
+                            job.state = JobState::Completed;
+                            job.progress = 1.0;
+                            job.output = Some(path.clone());
+                        }
+                        Err(_) if !job.state.is_active() => {}
+                        Err(PipelineError::Cancelled) => job.state = JobState::Stopped,
+                        Err(PipelineError::Failed(msg)) => {
+                            job.state = JobState::Failed(msg.clone())
                         }
                     }
                     job.speed = None;
@@ -792,6 +796,43 @@ mod tests {
         let engine = engine_at(d.path(), "sleep 30", 1); // start() 를 부르지 않는다
         assert_eq!(state_of(&engine, 1), JobState::Queued);
         assert_eq!(engine.add(new_job("b")).id, 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn finish_ok_completes_even_after_stop() {
+        let d = tempfile::tempdir().unwrap();
+        let mut q = QueueState::default();
+        q.add(new_job("a"), 0);
+        q.get_mut(1).unwrap().state = JobState::Stopped;
+        q.save(&d.path().join("data/queue.json")).unwrap();
+        let engine = engine_at(d.path(), "sleep 30", 1);
+        let out = d.path().join("Movies/kiri/a.mp4");
+        engine.finish(1, Ok(out.clone()));
+        let j = &engine.list()[0];
+        assert_eq!(j.state, JobState::Completed);
+        assert_eq!(
+            (j.progress, j.output.as_deref()),
+            (1.0, Some(out.as_path()))
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restart_clears_previous_output() {
+        let d = tempfile::tempdir().unwrap();
+        let mut q = QueueState::default();
+        q.add(new_job("a"), 0);
+        let j = q.get_mut(1).unwrap();
+        j.state = JobState::Failed("x".into());
+        j.output = Some("/old.mp4".into());
+        j.speed = Some("1MiB/s".into());
+        j.eta = Some("00:01".into());
+        q.save(&d.path().join("data/queue.json")).unwrap();
+        let engine = engine_at(d.path(), "sleep 30", 1);
+        engine.0.shutting_down.store(true, Ordering::SeqCst); // pump 가 시작하지 않게
+        engine.restart(1).unwrap();
+        let j = &engine.list()[0];
+        assert_eq!(j.state, JobState::Queued);
+        assert_eq!((&j.output, &j.speed, &j.eta), (&None, &None, &None));
     }
 
     #[test]
