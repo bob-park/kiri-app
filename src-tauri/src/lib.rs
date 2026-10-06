@@ -70,6 +70,7 @@ pub fn run() {
             bootstrap::spawn(handle);
             Ok(())
         })
+        .on_menu_event(tray::on_menu_event)
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::patch_settings,

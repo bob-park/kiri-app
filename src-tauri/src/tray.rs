@@ -11,7 +11,7 @@ use std::{
 use tauri::{
     AppHandle, Manager, Wry,
     image::Image,
-    menu::{MenuBuilder, MenuItem},
+    menu::{MenuBuilder, MenuEvent, MenuItem, SubmenuBuilder, WINDOW_SUBMENU_ID},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
@@ -54,6 +54,8 @@ pub struct TrayItems {
     pub summary: MenuItem<Wry>,
     pub open: MenuItem<Wry>,
     pub quit: MenuItem<Wry>,
+    /// 앱 메뉴의 종료(⌘Q)
+    pub app_quit: MenuItem<Wry>,
 }
 
 /// 설정이 저장될 때. 트레이가 아직 없으면 아무것도 하지 않는다.
@@ -64,6 +66,7 @@ pub fn relabel(app: &AppHandle, settings: &Settings) {
     let l = i18n::labels(i18n::resolve(&settings.general.ui_language));
     let _ = items.open.set_text(l.open);
     let _ = items.quit.set_text(l.quit);
+    let _ = items.app_quit.set_text(l.quit);
     if let Some(engine) = app.try_state::<Engine>() {
         let _ = items.summary.set_text(summary(&l, &engine.list()));
     }
@@ -83,6 +86,52 @@ pub fn relabel_queue(app: &AppHandle, jobs: &[Job]) {
             let _ = items.summary.set_text(text);
         }
     });
+}
+
+/// 트레이 메뉴와 앱 메뉴 공용(Builder::on_menu_event). 트레이의 on_menu_event 도 모든
+/// 메뉴 이벤트를 받으므로 한 곳에서만 처리한다.
+pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
+    match event.id.as_ref() {
+        "open" => {
+            let _ = windows::show_main(app);
+        }
+        // ExitRequested 를 거쳐 종료 확인을 받는다.
+        "quit" => app.exit(0),
+        _ => {}
+    }
+}
+
+/// 기본 macOS 메뉴와 같되 종료만 직접 만든 항목이다. 기본 Quit(`terminate:`)는
+/// ExitRequested 를 거치지 않아 종료 확인을 건너뛴다.
+fn app_menu(app: &AppHandle, quit: &MenuItem<Wry>) -> tauri::Result<tauri::menu::Menu<Wry>> {
+    let app_sub = SubmenuBuilder::new(app, app.package_info().name.clone())
+        .about(None)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .item(quit)
+        .build()?;
+    let edit = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let window = SubmenuBuilder::with_id(app, WINDOW_SUBMENU_ID, "Window")
+        .minimize()
+        .separator()
+        .close_window()
+        .build()?;
+    MenuBuilder::new(app)
+        .items(&[&app_sub, &edit, &window])
+        .build()
 }
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
@@ -119,19 +168,16 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
         })
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => {
-                let _ = windows::show_main(app);
-            }
-            "quit" => app.exit(0),
-            _ => {}
-        })
         .build(app)?;
+
+    let app_quit = MenuItem::with_id(app, "quit", l.quit, true, Some("CmdOrCtrl+Q"))?;
+    app.set_menu(app_menu(app, &app_quit)?)?;
 
     app.manage(TrayItems {
         summary: summary_item,
         open,
         quit,
+        app_quit,
     });
     relabel_queue(app, &app.state::<Engine>().list());
     Ok(())
