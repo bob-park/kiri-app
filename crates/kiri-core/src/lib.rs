@@ -2,6 +2,7 @@
 pub mod engine;
 pub mod ffmpeg;
 pub mod files;
+pub mod ipc;
 pub mod model;
 pub mod pipeline;
 pub mod queue;
