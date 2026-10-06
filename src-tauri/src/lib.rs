@@ -1,7 +1,10 @@
 mod bootstrap;
 mod commands;
+mod i18n;
 mod ipc_server;
+mod quit;
 mod settings;
+mod tray;
 mod windows;
 
 use kiri_core::{
@@ -20,9 +23,11 @@ pub(crate) fn sidecar(name: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
-/// 엔진이 직렬로 부른다. 여기서 Engine 의 변경 메서드를 부르면 교착하므로 emit 만 한다.
+/// 엔진이 직렬로 부른다. 여기서 Engine 의 변경 메서드를 부르면 교착하므로
+/// emit 과 (메인 스레드를 기다리지 않는) 트레이 갱신만 한다.
 fn on_queue_change(app: &AppHandle, jobs: &[Job]) {
     let _ = app.emit("queue-changed", jobs);
+    tray::relabel_queue(app, jobs);
 }
 
 pub fn run() {
@@ -59,6 +64,7 @@ pub fn run() {
             app.manage(engine.clone());
 
             windows::show_main(&handle).map_err(std::io::Error::other)?;
+            tray::build(&handle)?;
             engine.start();
             ipc_server::spawn(&handle, engine);
             bootstrap::spawn(handle);
@@ -77,6 +83,7 @@ pub fn run() {
             commands::tools_status,
             commands::update_tools,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running kiri");
+        .build(tauri::generate_context!())
+        .expect("error while building kiri")
+        .run(|app, event| quit::on_run_event(app, event));
 }

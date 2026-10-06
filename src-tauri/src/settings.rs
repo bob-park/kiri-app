@@ -187,6 +187,7 @@ impl SettingsState {
         };
         app.emit("settings-changed", &next)
             .map_err(|e| e.to_string())?;
+        crate::tray::relabel(app, &next); // 트레이가 아직 없으면 무시된다
         Ok(next)
     }
 }
