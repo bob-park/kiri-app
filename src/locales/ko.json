@@ -102,6 +102,7 @@
     }
   },
   "error": {
+    "no_update": "설치할 업데이트가 없습니다",
     "invalid_url": "YouTube 링크가 아닙니다",
     "ytdlp_missing": "아직 다운로드 준비 중입니다. 잠시 후 다시 시도해 주세요.",
     "not_found": "작업이 더 이상 없습니다",

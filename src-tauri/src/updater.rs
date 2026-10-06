@@ -90,7 +90,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         .lock()
         .unwrap()
         .clone()
-        .ok_or_else(|| fail("no_update".to_string()))?;
+        .ok_or_else(|| fail("error.no_update".to_string()))?;
     let mut received: u64 = 0;
     let mut last_pct = u64::MAX;
     let bytes = update

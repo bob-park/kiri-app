@@ -102,6 +102,7 @@
     }
   },
   "error": {
+    "no_update": "There is no update to install",
     "invalid_url": "That's not a YouTube link",
     "ytdlp_missing": "Still getting ready to download. Try again in a moment.",
     "not_found": "That job no longer exists",

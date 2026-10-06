@@ -65,10 +65,10 @@ pub fn install(target: &Path, link: &Path) -> Result<(), String> {
                 link.display()
             ));
         }
-        if let Err(e) = fs::remove_file(link) {
-            if e.kind() != io::ErrorKind::NotFound {
-                return admin_link(target, link, &e);
-            }
+        if let Err(e) = fs::remove_file(link)
+            && e.kind() != io::ErrorKind::NotFound
+        {
+            return admin_link(target, link, &e);
         }
     }
     match std::os::unix::fs::symlink(target, link) {
