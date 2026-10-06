@@ -27,7 +27,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCN0VCNjkzRDQxNzU3NEQKUldSTlZ4ZlVrN1orYTJWeHpwYTNNSkM4Nml5US9SRmxKT2ZjOXRjanJsRjRzSmxLZkI4NlVSMjYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFCMTQ3ODdDM0IwMjdEMTcKUldRWGZRSTdmSGdVRzhZU3Y4Sm92WjRXY1JXT0VWNkl2dlNPdG5zRnVJd0VHazNNOWhnUDBBa0EK",
       "endpoints": ["https://github.com/bob-park/kiri-app/releases/latest/download/latest.json"]
     }
   }
