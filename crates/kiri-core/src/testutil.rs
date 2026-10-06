@@ -65,3 +65,10 @@ pub fn job(preset: Preset) -> Job {
         created_at: 0,
     }
 }
+
+pub const PROBE_FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/probe.json");
+
+/// `-J` 이면 fixture 를 출력하고, 아니면 download_body 를 실행한다.
+pub fn ytdlp_with_probe(download_body: &str) -> String {
+    format!("case \" $* \" in *\" -J \"*) cat '{PROBE_FIXTURE}'; exit 0;; esac\n{download_body}")
+}
