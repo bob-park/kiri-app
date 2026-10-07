@@ -192,12 +192,12 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kiri_core::model::{JobOptions, Preset};
+    use kiri_core::model::{JobOptions, JobSource, Preset};
 
     fn job(id: u64, state: JobState, progress: f32) -> Job {
         Job {
             id,
-            url: "u".into(),
+            source: JobSource::Youtube { url: "u".into() },
             title: "Rust in 100 Seconds".into(),
             thumbnail: None,
             duration_secs: None,
@@ -207,6 +207,7 @@ mod tests {
                 preset: Preset::Original,
                 subtitles: vec![],
                 auto_subtitles: false,
+                max_height: None,
             },
             state,
             progress,

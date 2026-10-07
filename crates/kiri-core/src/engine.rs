@@ -1,7 +1,7 @@
 //! 앱 하나에 하나. 큐 상태 + 동시 실행 + 프로세스 취소를 묶는다. UI 와 CLI 가 같은 Engine 을 쓴다.
 use crate::{
     files,
-    model::{Job, JobOptions, JobState, NewJob, Preset, Tools},
+    model::{Job, JobOptions, JobSource, JobState, NewJob, Preset, Tools},
     pipeline::{self, PipelineCfg, PipelineError, Report, Stage},
     queue::QueueState,
     runner,
@@ -212,8 +212,9 @@ impl Engine {
     }
 
     pub fn add(&self, new: NewJob) -> Result<Job, EngineError> {
-        if !ytdlp::is_youtube_url(&new.url) {
-            return Err(EngineError::InvalidUrl);
+        match &new.source {
+            JobSource::Youtube { url } if ytdlp::is_youtube_url(url) => {}
+            _ => return Err(EngineError::InvalidUrl),
         }
         let job = self.0.state.lock().unwrap().add(new, now_ms());
         self.save();
@@ -259,7 +260,9 @@ impl Engine {
         let langs = subs.unwrap_or(cfg.default_subtitles);
         let (subtitles, auto_subtitles) = ytdlp::pick_subtitles(&info, &langs);
         self.add(NewJob {
-            url: url.trim().to_string(),
+            source: JobSource::Youtube {
+                url: url.trim().to_string(),
+            },
             title: info.title,
             thumbnail: info.thumbnail,
             duration_secs: info.duration_secs,
@@ -271,6 +274,7 @@ impl Engine {
                 preset,
                 subtitles,
                 auto_subtitles,
+                max_height: None,
             },
         })
     }
@@ -563,7 +567,9 @@ mod tests {
 
     fn new_job(title: &str) -> NewJob {
         NewJob {
-            url: "https://youtu.be/abc123".into(),
+            source: JobSource::Youtube {
+                url: "https://youtu.be/abc123".into(),
+            },
             title: title.into(),
             thumbnail: None,
             duration_secs: Some(2.0),
@@ -573,6 +579,7 @@ mod tests {
                 preset: Preset::Original,
                 subtitles: vec![],
                 auto_subtitles: false,
+                max_height: None,
             },
         }
     }
@@ -1036,7 +1043,9 @@ mod tests {
     async fn add_rejects_non_youtube_url() {
         let e = env("sleep 30", 1);
         let mut j = new_job("a");
-        j.url = "--exec=touch /tmp/pwned".into();
+        j.source = JobSource::Youtube {
+            url: "--exec=touch /tmp/pwned".into(),
+        };
         assert!(matches!(e.engine.add(j), Err(EngineError::InvalidUrl)));
         assert!(e.engine.list().is_empty());
     }

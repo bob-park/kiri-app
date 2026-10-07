@@ -208,6 +208,7 @@ mod tests {
             ytdlp: dir.join("none/yt-dlp"),
             deno: dir.join("none/deno"),
             ffmpeg: dir.join("none/ffmpeg"),
+            ffprobe: dir.join("none/ffprobe"),
         };
         let paths = EnginePaths {
             queue_file: dir.join("q.json"),

@@ -1,7 +1,7 @@
 //! 작업 하나의 전 과정: 다운로드 → (필요하면) 인코딩 → 저장 위치로 이동.
 use crate::{
     ffmpeg, files,
-    model::{Job, Tools},
+    model::{Job, JobSource, Tools},
     runner::{self, RunError},
     ytdlp,
 };
@@ -96,7 +96,15 @@ pub async fn run(
         speed: None,
         eta: None,
     });
-    let args = ytdlp::download_args(&job.url, &job.options, &cfg.tools, &cfg.work_dir);
+    let url = match &job.source {
+        JobSource::Youtube { url } => url.as_str(),
+        JobSource::File { .. } => {
+            return Err(PipelineError::Failed(
+                "file transcode is not supported yet".into(),
+            ));
+        }
+    };
+    let args = ytdlp::download_args(url, &job.options, &cfg.tools, &cfg.work_dir);
     let mut tracker = ytdlp::ProgressTracker::new(ytdlp::expected_streams(&job.options));
     runner::run(&cfg.tools.ytdlp, &args, cancel, |line| {
         if let Some(p) = tracker.feed(line) {

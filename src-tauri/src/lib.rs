@@ -56,6 +56,7 @@ pub fn run() {
                 ytdlp: bin.join("yt-dlp"),
                 deno: bin.join("deno"),
                 ffmpeg: sidecar("ffmpeg"),
+                ffprobe: sidecar("ffprobe"),
             };
             let paths = EnginePaths {
                 queue_file: path.app_local_data_dir()?.join("queue.json"),
