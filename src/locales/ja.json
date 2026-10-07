@@ -14,7 +14,8 @@
     "remove": "削除",
     "restart": "再開",
     "reveal": "Finder で表示",
-    "subs": "字幕 {{langs}}"
+    "subs": "字幕 {{langs}}",
+    "transcode": "変換"
   },
   "state": {
     "queued": "待機中",
@@ -113,6 +114,8 @@
     "bad_preset": "不明なフォーマットです",
     "download_dir_unwritable": "保存先に書き込めません",
     "no_output": "yt-dlp は終了しましたがファイルがありません",
+    "source_not_found": "元のファイルが見つかりません",
+    "invalid_media": "動画または音声ファイルではありません",
     "unknown": "問題が発生しました"
   }
 }

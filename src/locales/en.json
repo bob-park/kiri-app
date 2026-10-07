@@ -14,7 +14,8 @@
     "remove": "Remove",
     "restart": "Restart",
     "reveal": "Show in Finder",
-    "subs": "Subs {{langs}}"
+    "subs": "Subs {{langs}}",
+    "transcode": "Transcode"
   },
   "state": {
     "queued": "Queued",
@@ -113,6 +114,8 @@
     "bad_preset": "Unknown format",
     "download_dir_unwritable": "Can't write to the download folder",
     "no_output": "yt-dlp finished but produced no file",
+    "source_not_found": "Source file not found",
+    "invalid_media": "Not a video or audio file",
     "unknown": "Something went wrong"
   }
 }

@@ -20,7 +20,9 @@ export function JobRow({ job }: { job: Job }) {
       {job.thumbnail ? (
         <img src={job.thumbnail} alt="" className="h-12 w-20 shrink-0 rounded-md object-cover" />
       ) : (
-        <div className="h-12 w-20 shrink-0 rounded-md bg-base-300" />
+        <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-md bg-base-300 text-fg-muted">
+          {job.source.kind === "file" && <Icon name="file" />}
+        </div>
       )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">{job.title}</div>

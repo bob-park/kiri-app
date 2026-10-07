@@ -3,8 +3,8 @@ import { hasActive, isIdle } from "../lib/queue";
 import type { Job, JobState } from "../lib/types";
 
 const job = (state: JobState): Job => ({
-  id: 1, url: "u", title: "t", thumbnail: null, duration_secs: null, quality_label: "720p",
-  options: { format_id: null, preset: "original", subtitles: [], auto_subtitles: false },
+  id: 1, source: { kind: "youtube", url: "u" }, title: "t", thumbnail: null, duration_secs: null, quality_label: "720p",
+  options: { format_id: null, preset: "original", subtitles: [], auto_subtitles: false, max_height: null },
   state, progress: 0, speed: null, eta: null, output: null, work_dir: null, created_at: 0,
 });
 
