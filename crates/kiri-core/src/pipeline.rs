@@ -122,11 +122,24 @@ pub async fn run(
     let downloaded = files::find_media(&cfg.work_dir)
         .map_err(io_fail)?
         .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
-    let media = match encode(job, cfg, cancel, &downloaded, &mut report).await? {
-        Some(encoded) => encoded,
-        None => downloaded,
-    };
-    finalize(cfg, &media)
+    match encode(job, cfg, cancel, &downloaded, &mut report).await? {
+        None => finalize(cfg, &downloaded),
+        Some(encoded) => {
+            // 원본(과 자막)을 먼저 저장 폴더로 옮기고, 그 최종 이름을 기준으로 변환본 이름을 정한다.
+            let original = finalize(cfg, &downloaded)?;
+            let stem = original
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("video");
+            let ext = encoded
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("mp4");
+            let dest = files::variant_path(&cfg.download_dir, stem, ext);
+            files::move_file(&encoded, &dest).map_err(io_fail)?;
+            Ok(dest)
+        }
+    }
 }
 
 async fn encode(
@@ -289,7 +302,12 @@ mod tests {
     async fn encodes_when_preset_needs_it() {
         let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
         let (r, reports) = go(&e, Preset::MovProres).await;
-        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video.mov"));
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mov"));
+        assert!(
+            e.cfg.download_dir.join("Fake Video.mp4").exists(),
+            "original kept"
+        );
+        assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
         assert!(
             reports
                 .iter()
@@ -298,10 +316,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn second_conversion_gets_next_index() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(e.cfg.download_dir.join("Fake Video-1.mov"), "earlier").unwrap();
+        let (r, _) = go(&e, Preset::Mp4H264).await;
+        // 원본은 같은 이름이 없으니 Fake Video.mp4, 변환본은 기존 -1 다음인 -2
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-2.mp4"));
+        assert!(e.cfg.download_dir.join("Fake Video.mp4").exists());
+    }
+
+    #[tokio::test]
+    async fn audio_preset_keeps_downloaded_original() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        let (r, _) = go(&e, Preset::Mp3).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp3"));
+        assert!(e.cfg.download_dir.join("Fake Video.mp4").exists());
+    }
+
+    #[tokio::test]
     async fn falls_back_to_software_when_videotoolbox_fails() {
         let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG_VT_FAILS, true);
         let (r, _) = go(&e, Preset::Mp4H264).await;
-        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video.mp4"));
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
         let log = fs::read_to_string(&e.cfg.log_path).unwrap();
         assert!(log.contains("videotoolbox"), "{log}");
     }
