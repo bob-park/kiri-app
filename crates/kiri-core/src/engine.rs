@@ -55,6 +55,10 @@ pub enum EngineError {
     BadQuality(String),
     #[error("unknown format: {0}")]
     BadPreset(String),
+    #[error("source not found: {0}")]
+    SourceNotFound(String),
+    #[error("{0}")]
+    InvalidMedia(String),
 }
 
 impl EngineError {
@@ -69,6 +73,8 @@ impl EngineError {
             EngineError::Probe(_) => "probe_failed",
             EngineError::BadQuality(_) => "bad_quality",
             EngineError::BadPreset(_) => "bad_preset",
+            EngineError::SourceNotFound(_) => "source_not_found",
+            EngineError::InvalidMedia(_) => "invalid_media",
         }
     }
 }
@@ -216,16 +222,88 @@ impl Engine {
             JobSource::Youtube { url } if ytdlp::is_youtube_url(url) => {}
             _ => return Err(EngineError::InvalidUrl),
         }
+        Ok(self.insert(new))
+    }
+
+    fn insert(&self, new: NewJob) -> Job {
         let job = self.0.state.lock().unwrap().add(new, now_ms());
         self.save();
         self.notify();
         self.pump();
-        // pump 가 같은 호출 안에서 Downloading 으로 바꿨을 수 있다. 최신 상태를 돌려준다.
-        Ok(self
-            .list()
+        // pump 가 같은 호출 안에서 상태를 바꿨을 수 있다. 최신 상태를 돌려준다.
+        self.list()
             .into_iter()
             .find(|j| j.id == job.id)
-            .unwrap_or(job))
+            .unwrap_or(job)
+    }
+
+    /// CLI `transcode`: 로컬 파일을 변환하는 작업. 원본은 읽기만 한다.
+    pub async fn add_file(
+        &self,
+        path: PathBuf,
+        output_dir: Option<PathBuf>,
+        preset: &str,
+        quality: Option<String>,
+    ) -> Result<Job, EngineError> {
+        if !path.is_file() {
+            return Err(EngineError::SourceNotFound(path.display().to_string()));
+        }
+        let preset = preset
+            .parse::<Preset>()
+            .ok()
+            .filter(|p| *p != Preset::Original)
+            .ok_or_else(|| EngineError::BadPreset(preset.to_string()))?;
+        let quality = quality.unwrap_or_else(|| "original".into());
+        let max_height = match quality.as_str() {
+            "original" => None,
+            q => Some(
+                q.strip_suffix('p')
+                    .and_then(|n| n.parse::<u32>().ok())
+                    .filter(|h| *h > 0)
+                    .ok_or_else(|| EngineError::BadQuality(quality.clone()))?,
+            ),
+        };
+        let duration_secs = self.media_duration(&path).await?;
+        let title = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+        Ok(self.insert(NewJob {
+            source: JobSource::File { path, output_dir },
+            title,
+            thumbnail: None,
+            duration_secs,
+            quality_label: quality,
+            options: JobOptions {
+                format_id: None,
+                preset,
+                subtitles: vec![],
+                auto_subtitles: false,
+                max_height,
+            },
+        }))
+    }
+
+    /// ffprobe 로 길이를 읽는다. 읽지 못하면 미디어가 아니라고 본다. 길이가 N/A 면 None.
+    async fn media_duration(&self, path: &Path) -> Result<Option<f64>, EngineError> {
+        let args: Vec<String> = [
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+            "-i",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .chain([path.display().to_string()])
+        .collect();
+        let out = runner::output(&self.0.tools.ffprobe, &args)
+            .await
+            .map_err(|e| EngineError::InvalidMedia(e.summary()))?;
+        Ok(out.trim().parse::<f64>().ok())
     }
 
     /// CLI 경로: probe → 화질/프리셋/자막 해석 → add. 생략한 옵션은 설정 기본값.
@@ -406,18 +484,31 @@ impl Engine {
                     return;
                 };
                 let job = st.get_mut(id).expect("queued job exists");
-                job.state = JobState::Downloading;
+                job.state = match job.source {
+                    JobSource::File { .. } => JobState::Encoding,
+                    JobSource::Youtube { .. } => JobState::Downloading,
+                };
                 job.progress = 0.0;
-                // 저장된 패키지가 없거나(지워짐·만들지 못함) 표식이 없으면 지금 저장 폴더에 새로 만든다.
+                let out_dir = job.result_dir(&cfg.download_dir);
+                // 저장된 패키지가 없거나(지워짐·만들지 못함) 표식이 없으면 결과 폴더에 새로 만든다.
                 let work_dir = match &job.work_dir {
                     Some(d) if files::is_part_dir(d) => d.clone(),
                     _ => {
-                        let dir = files::unique_path(
-                            &cfg.download_dir,
-                            &format!("{}.{}", files::safe_title(&job.title), files::PART_EXT),
-                        );
-                        // 바로 만들어 이름을 선점한다(같은 제목의 다음 작업이 다른 이름을 받게).
-                        // 실패하면 저장하지 않고, pipeline 이 저장 폴더 오류로 보고한다.
+                        let name = match &job.source {
+                            JobSource::Youtube { .. } => {
+                                format!("{}.{}", files::safe_title(&job.title), files::PART_EXT)
+                            }
+                            JobSource::File { path, .. } => {
+                                let stem = files::safe_title(
+                                    path.file_stem().and_then(|s| s.to_str()).unwrap_or("file"),
+                                );
+                                let n = files::next_variant_index(&out_dir, &stem);
+                                format!("{stem}-{n}.{}", files::PART_EXT)
+                            }
+                        };
+                        let dir = files::unique_path(&out_dir, &name);
+                        // 바로 만들어 이름을 선점한다(같은 이름의 다음 작업이 다른 이름을 받게).
+                        // 실패하면 저장하지 않고, pipeline 이 결과 폴더 오류로 보고한다.
                         if files::make_part_dir(&dir).is_ok() {
                             job.work_dir = Some(dir.clone());
                         }
@@ -442,7 +533,7 @@ impl Engine {
             let pcfg = PipelineCfg {
                 tools: me.0.tools.clone(),
                 hw_accel: cfg.hw_accel,
-                download_dir: cfg.download_dir,
+                download_dir: job.result_dir(&cfg.download_dir),
                 work_dir,
                 log_path: me.0.paths.log_dir.join(format!("{}.log", job.id)),
             };
@@ -1123,5 +1214,221 @@ mod tests {
         assert_eq!(EngineError::NotFound(3).code(), "not_found");
         assert_eq!(EngineError::NotFound(3).to_string(), "job 3 not found");
         assert_eq!(EngineError::YtdlpMissing.code(), "ytdlp_missing");
+    }
+
+    fn source_file(d: &Path, name: &str) -> PathBuf {
+        let dir = d.join("clips");
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join(name);
+        std::fs::write(&p, "orig").unwrap();
+        p
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn add_file_validates_input() {
+        let e = env("sleep 30", 1);
+        let missing = e.d.path().join("nope.mkv");
+        assert!(matches!(
+            e.engine.add_file(missing, None, "mp4-h264", None).await,
+            Err(EngineError::SourceNotFound(_))
+        ));
+        assert!(matches!(
+            e.engine
+                .add_file(e.d.path().to_path_buf(), None, "mp4-h264", None)
+                .await,
+            Err(EngineError::SourceNotFound(_))
+        ));
+        let src = source_file(e.d.path(), "a.mkv");
+        assert!(matches!(
+            e.engine.add_file(src.clone(), None, "original", None).await,
+            Err(EngineError::BadPreset(_))
+        ));
+        assert!(matches!(
+            e.engine.add_file(src.clone(), None, "avi", None).await,
+            Err(EngineError::BadPreset(_))
+        ));
+        assert!(matches!(
+            e.engine
+                .add_file(src.clone(), None, "mp4-h264", Some("hd".into()))
+                .await,
+            Err(EngineError::BadQuality(_))
+        ));
+        testutil::script(
+            &e.d.path().join("bin"),
+            "ffprobe",
+            "echo 'Invalid data found when processing input' >&2; exit 1",
+        );
+        match e.engine.add_file(src, None, "mp4-h264", None).await {
+            Err(EngineError::InvalidMedia(m)) => assert!(m.contains("Invalid data"), "{m}"),
+            other => panic!("{other:?}"),
+        }
+        assert!(e.engine.list().is_empty());
+        assert_eq!(
+            EngineError::SourceNotFound("x".into()).code(),
+            "source_not_found"
+        );
+        assert_eq!(
+            EngineError::InvalidMedia("x".into()).code(),
+            "invalid_media"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn add_rejects_file_source_from_ui_path() {
+        let e = env("sleep 30", 1);
+        let mut j = new_job("a");
+        j.source = JobSource::File {
+            path: "/tmp/x.mkv".into(),
+            output_dir: None,
+        };
+        assert!(matches!(e.engine.add(j), Err(EngineError::InvalidUrl)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn file_transcode_keeps_source_and_writes_variant() {
+        let e = env("sleep 30", 2);
+        let src = source_file(e.d.path(), "clip.mkv");
+        let before = std::fs::metadata(&src).unwrap().modified().unwrap();
+        let j = e
+            .engine
+            .add_file(src.clone(), None, "mp4-h264", Some("720p".into()))
+            .await
+            .unwrap();
+        assert_eq!(
+            (
+                j.title.as_str(),
+                j.quality_label.as_str(),
+                j.options.max_height,
+                j.duration_secs
+            ),
+            ("clip.mkv", "720p", Some(720), Some(2.0))
+        );
+        wait_for(&e.engine, |jobs| jobs[0].state == JobState::Completed).await;
+        let out = e.d.path().join("clips/clip-1.mp4");
+        assert_eq!(e.engine.list()[0].output.as_deref(), Some(out.as_path()));
+        assert!(out.exists());
+        assert_eq!(std::fs::read_to_string(&src).unwrap(), "orig");
+        assert_eq!(std::fs::metadata(&src).unwrap().modified().unwrap(), before);
+        assert!(!e.d.path().join("clips/clip-1.kiripart").exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn file_transcode_honours_output_dir() {
+        let e = env("sleep 30", 1);
+        let src = source_file(e.d.path(), "clip.mkv");
+        let out_dir = e.d.path().join("converted"); // 없는 폴더는 만든다
+        e.engine
+            .add_file(src, Some(out_dir.clone()), "mp3", None)
+            .await
+            .unwrap();
+        wait_for(&e.engine, |jobs| jobs[0].state == JobState::Completed).await;
+        assert!(out_dir.join("clip-1.mp3").exists());
+        assert!(!e.d.path().join("clips/clip-1.mp3").exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn two_transcodes_of_same_file_get_distinct_indices() {
+        let e = env("sleep 30", 2);
+        let src = source_file(e.d.path(), "clip.mkv");
+        e.engine
+            .add_file(src.clone(), None, "mp4-h264", None)
+            .await
+            .unwrap();
+        e.engine
+            .add_file(src, None, "mov-prores", None)
+            .await
+            .unwrap();
+        wait_for(&e.engine, |jobs| {
+            jobs.iter().all(|j| j.state == JobState::Completed)
+        })
+        .await;
+        let clips = e.d.path().join("clips");
+        let outs: Vec<_> = e
+            .engine
+            .list()
+            .into_iter()
+            .map(|j| j.output.unwrap())
+            .collect();
+        assert_ne!(outs[0], outs[1]);
+        assert!(
+            outs.iter()
+                .all(|o| o.exists() && o.parent() == Some(clips.as_path()))
+        );
+        let mut names: Vec<String> = outs
+            .iter()
+            .map(|o| o.file_stem().unwrap().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["clip-1", "clip-2"]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn source_deleted_before_start_fails_job() {
+        let e = env("sleep 30", 1);
+        let bin = e.d.path().join("bin");
+        // ffmpeg 가짜: -i 다음 파일이 없으면 실패
+        testutil::script(
+            &bin,
+            "ffmpeg",
+            &format!(
+                "prev=\"\"\nfor a; do if [ \"$prev\" = \"-i\" ] && [ ! -f \"$a\" ]; then echo \"$a: No such file or directory\" >&2; exit 1; fi; prev=\"$a\"; done\n{FAKE_FFMPEG}"
+            ),
+        );
+        e.engine.add(new_job("busy")).unwrap(); // 슬롯 점유 (sleep 30)
+        let src = source_file(e.d.path(), "clip.mkv");
+        e.engine
+            .add_file(src.clone(), None, "mp4-h264", None)
+            .await
+            .unwrap();
+        std::fs::remove_file(&src).unwrap();
+        e.engine.stop(1).unwrap(); // 슬롯을 비워 변환 작업을 시작시킨다
+        wait_for(&e.engine, |jobs| {
+            matches!(jobs[1].state, JobState::Failed(_))
+        })
+        .await;
+        let JobState::Failed(m) = &e.engine.list()[1].state else {
+            unreachable!()
+        };
+        assert!(m.contains("No such file"), "{m}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restart_file_job_reencodes_from_scratch() {
+        let e = env("sleep 30", 1);
+        let bin = e.d.path().join("bin");
+        let marker = e.d.path().join("second-run");
+        // 첫 실행: 출력에 "partial" 을 쓰고 대기. 두 번째(marker 있음): 정상 완료.
+        testutil::script(
+            &bin,
+            "ffmpeg",
+            &format!(
+                "for a; do last=\"$a\"; done\nif [ ! -f '{}' ]; then mkdir -p \"$(dirname \"$last\")\"; echo partial > \"$last\"; sleep 30; fi\n{FAKE_FFMPEG}",
+                marker.display()
+            ),
+        );
+        let src = source_file(e.d.path(), "clip.mkv");
+        e.engine
+            .add_file(src, None, "mp4-h264", None)
+            .await
+            .unwrap();
+        wait_for(&e.engine, |jobs| jobs[0].state == JobState::Encoding).await;
+        let pkg = e.engine.list()[0].work_dir.clone().unwrap();
+        e.engine.stop(1).unwrap();
+        // 이전 태스크가 정말 끝날 때까지(실행 맵이 빌 때까지) 기다린다.
+        wait_for(&e.engine, |_| {
+            e.engine.0.running.lock().unwrap().is_empty() && !e.engine.has_active()
+        })
+        .await;
+        std::fs::write(&marker, "").unwrap();
+        e.engine.restart(1).unwrap();
+        wait_for(&e.engine, |jobs| jobs[0].state == JobState::Completed).await;
+        let out = e.engine.list()[0].output.clone().unwrap();
+        assert_eq!(out, e.d.path().join("clips/clip-1.mp4"));
+        assert_eq!(
+            std::fs::read_to_string(&out).unwrap(),
+            "",
+            "must not keep the partial output"
+        );
+        assert!(!pkg.exists());
     }
 }

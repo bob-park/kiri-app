@@ -1,6 +1,10 @@
 //! 큐와 CLI 가 함께 쓰는 작업 모델. serde 표현이 곧 프론트엔드·CLI 계약이다.
 use serde::{Deserialize, Serialize};
-use std::{fmt, path::PathBuf, str::FromStr};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -146,6 +150,19 @@ pub struct Job {
     /// unix epoch milliseconds
     #[serde(default)]
     pub created_at: u64,
+}
+
+impl Job {
+    /// 결과물이 놓일 폴더. 파일 변환은 지정 폴더(없으면 원본 폴더), 다운로드는 저장 폴더.
+    pub fn result_dir(&self, download_dir: &Path) -> PathBuf {
+        match &self.source {
+            JobSource::Youtube { .. } => download_dir.to_path_buf(),
+            JobSource::File { path, output_dir } => output_dir
+                .clone()
+                .or_else(|| path.parent().map(Path::to_path_buf))
+                .unwrap_or_else(|| download_dir.to_path_buf()),
+        }
+    }
 }
 
 /// 큐에 넣을 작업. UI 는 probe 결과로, CLI 는 Engine::add_url 이 만든다.

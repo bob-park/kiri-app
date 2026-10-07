@@ -89,21 +89,25 @@ pub async fn run(
         return Err(PipelineError::Failed(ERR_DIR_UNWRITABLE.into()));
     }
     files::make_part_dir(&cfg.work_dir).map_err(io_fail)?;
+    match &job.source {
+        JobSource::Youtube { url } => download_and_save(job, url, cfg, cancel, &mut report).await,
+        JobSource::File { path, .. } => transcode_file(job, path, cfg, cancel, &mut report).await,
+    }
+}
 
+async fn download_and_save(
+    job: &Job,
+    url: &str,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    report: &mut impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
     report(Report {
         stage: Stage::Downloading,
         progress: 0.0,
         speed: None,
         eta: None,
     });
-    let url = match &job.source {
-        JobSource::Youtube { url } => url.as_str(),
-        JobSource::File { .. } => {
-            return Err(PipelineError::Failed(
-                "file transcode is not supported yet".into(),
-            ));
-        }
-    };
     let args = ytdlp::download_args(url, &job.options, &cfg.tools, &cfg.work_dir);
     let mut tracker = ytdlp::ProgressTracker::new(ytdlp::expected_streams(&job.options));
     runner::run(&cfg.tools.ytdlp, &args, cancel, |line| {
@@ -122,7 +126,7 @@ pub async fn run(
     let downloaded = files::find_media(&cfg.work_dir)
         .map_err(io_fail)?
         .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
-    match encode(job, cfg, cancel, &downloaded, &mut report).await? {
+    match encode(job, cfg, cancel, &downloaded, report).await? {
         None => finalize(cfg, &downloaded),
         Some(encoded) => {
             // 원본(과 자막)을 먼저 저장 폴더로 옮기고, 그 최종 이름을 기준으로 변환본 이름을 정한다.
@@ -140,6 +144,38 @@ pub async fn run(
             Ok(dest)
         }
     }
+}
+
+/// 로컬 파일 변환: 원본은 읽기만 하고, 결과를 `{원본}-{n}.{확장자}` 로 결과 폴더에 둔다.
+async fn transcode_file(
+    job: &Job,
+    src: &Path,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    report: &mut impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
+    // 재시작이면 이전 부분 출력을 버린다(ffmpeg 는 이어서 인코딩하지 못한다).
+    let _ = fs::remove_dir_all(cfg.work_dir.join("out"));
+    let encoded = encode(job, cfg, cancel, src, report)
+        .await?
+        .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
+    let ext = encoded
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4");
+    // 패키지 이름이 `{stem}-{n}.kiripart` 이므로 같은 번호로 꺼낸다. 이미 있으면 다음 번호.
+    let pkg_stem = cfg
+        .work_dir
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let mut dest = cfg.download_dir.join(format!("{pkg_stem}.{ext}"));
+    if dest.exists() {
+        let stem = files::safe_title(src.file_stem().and_then(|s| s.to_str()).unwrap_or("file"));
+        dest = files::variant_path(&cfg.download_dir, &stem, ext);
+    }
+    files::move_file(&encoded, &dest).map_err(io_fail)?;
+    Ok(dest)
 }
 
 async fn encode(
