@@ -181,8 +181,14 @@ async fn encode_once(
     hw: bool,
     report: &mut impl FnMut(Report),
 ) -> Result<(), RunError> {
-    let args =
-        ffmpeg::encode_args(job.options.preset, hw, input, output).expect("preset with extension");
+    let args = ffmpeg::encode_args(
+        job.options.preset,
+        hw,
+        job.options.max_height,
+        input,
+        output,
+    )
+    .expect("preset with extension");
     let duration = job.duration_secs;
     runner::run(&cfg.tools.ffmpeg, &args, cancel, |line| {
         if let Some(p) = ffmpeg::parse_progress(line, duration) {
