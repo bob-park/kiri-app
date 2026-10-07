@@ -14,7 +14,8 @@
     "remove": "削除",
     "restart": "再開",
     "reveal": "Finder で表示",
-    "subs": "字幕 {{langs}}"
+    "subs": "字幕 {{langs}}",
+    "transcode": "変換"
   },
   "state": {
     "queued": "待機中",
@@ -24,7 +25,7 @@
     "failed": "失敗",
     "stopped": "停止済み"
   },
-  "quality": { "best": "最高画質", "audio": "音声のみ" },
+  "quality": { "best": "最高画質", "audio": "音声のみ", "original": "元の画質" },
   "preset": {
     "original": "元のまま",
     "mp4-h264": "MP4 · H.264",
@@ -111,8 +112,10 @@
     "not_restartable": "再開できないジョブです",
     "bad_quality": "不明な画質です",
     "bad_preset": "不明なフォーマットです",
-    "download_dir_unwritable": "保存先に書き込めません",
+    "download_dir_unwritable": "保存先フォルダに書き込めません",
     "no_output": "yt-dlp は終了しましたがファイルがありません",
+    "source_not_found": "元のファイルが見つかりません",
+    "invalid_media": "動画または音声ファイルではありません",
     "unknown": "問題が発生しました"
   }
 }

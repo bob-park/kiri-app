@@ -10,13 +10,30 @@ pub struct QueueState {
     pub jobs: Vec<Job>,
 }
 
+/// v0.1.x queue.json: 작업에 `source` 대신 `url` 만 있다. YouTube 작업으로 바꿔 읽는다.
+fn migrate_legacy(v: &mut serde_json::Value) {
+    let Some(jobs) = v.get_mut("jobs").and_then(|j| j.as_array_mut()) else {
+        return;
+    };
+    for job in jobs.iter_mut().filter_map(|j| j.as_object_mut()) {
+        if !job.contains_key("source")
+            && let Some(url) = job.remove("url")
+        {
+            job.insert(
+                "source".into(),
+                serde_json::json!({"kind": "youtube", "url": url}),
+            );
+        }
+    }
+}
+
 impl QueueState {
     pub fn add(&mut self, new: NewJob, now_ms: u64) -> Job {
         let id = self.next_id.max(1);
         self.next_id = id + 1;
         let job = Job {
             id,
-            url: new.url,
+            source: new.source,
             title: new.title,
             thumbnail: new.thumbnail,
             duration_secs: new.duration_secs,
@@ -71,7 +88,10 @@ impl QueueState {
     /// 두 번째 값은 파일을 믿을 수 있는지(정상이거나 아직 없음). 손상·읽기 오류면 false.
     pub fn load_checked(path: &Path) -> (QueueState, bool) {
         let (mut q, trusted): (QueueState, bool) = match fs::read_to_string(path) {
-            Ok(text) => match serde_json::from_str(&text) {
+            Ok(text) => match serde_json::from_str::<serde_json::Value>(&text).and_then(|mut v| {
+                migrate_legacy(&mut v);
+                serde_json::from_value(v)
+            }) {
                 Ok(q) => (q, true),
                 Err(e) => {
                     // 다음 save 가 덮어쓰기 전에 손상된 파일을 남겨 둔다.
@@ -110,11 +130,39 @@ impl QueueState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::JobSource;
     use crate::model::{JobOptions, Preset};
+
+    #[test]
+    fn loads_legacy_url_jobs() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("queue.json");
+        // v0.1.x 형식: source 없이 url, options 에 max_height 없음
+        fs::write(
+            &path,
+            r#"{"next_id":2,"jobs":[{"id":1,"url":"https://youtu.be/x","title":"t",
+               "options":{"format_id":null,"preset":"original","subtitles":[],"auto_subtitles":false},
+               "state":{"kind":"completed"}}]}"#,
+        )
+        .unwrap();
+        let (q, trusted) = QueueState::load_checked(&path);
+        assert!(trusted);
+        assert_eq!(q.jobs.len(), 1);
+        assert_eq!(
+            q.jobs[0].source,
+            JobSource::Youtube {
+                url: "https://youtu.be/x".into()
+            }
+        );
+        assert_eq!(q.jobs[0].options.max_height, None);
+        assert!(!path.with_extension("json.bad").exists());
+    }
 
     fn new_job(title: &str) -> NewJob {
         NewJob {
-            url: "https://youtu.be/x".into(),
+            source: JobSource::Youtube {
+                url: "https://youtu.be/x".into(),
+            },
             title: title.into(),
             thumbnail: None,
             duration_secs: Some(10.0),
@@ -124,6 +172,7 @@ mod tests {
                 preset: Preset::Original,
                 subtitles: vec![],
                 auto_subtitles: false,
+                max_height: None,
             },
         }
     }

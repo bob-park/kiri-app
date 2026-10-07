@@ -10,6 +10,7 @@ kiri list              # whole queue
 kiri add <url> [--quality 1080p] [--format mp4-h264] [--subs ko,en]
 kiri stop <id>
 kiri remove <id>
+kiri transcode <file> --format mp4-hevc [--quality 720p] [--output <dir>]
 kiri list --json       # machine-readable`;
 
 export function CliTab() {

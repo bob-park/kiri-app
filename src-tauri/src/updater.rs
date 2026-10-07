@@ -179,12 +179,12 @@ pub fn on_tray_click(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kiri_core::model::{JobOptions, JobState, Preset};
+    use kiri_core::model::{JobOptions, JobSource, JobState, Preset};
 
     fn job(state: JobState) -> Job {
         Job {
             id: 1,
-            url: "u".into(),
+            source: JobSource::Youtube { url: "u".into() },
             title: "t".into(),
             thumbnail: None,
             duration_secs: None,
@@ -194,6 +194,7 @@ mod tests {
                 preset: Preset::Original,
                 subtitles: vec![],
                 auto_subtitles: false,
+                max_height: None,
             },
             state,
             progress: 0.0,

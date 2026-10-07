@@ -1,7 +1,7 @@
 //! 작업 하나의 전 과정: 다운로드 → (필요하면) 인코딩 → 저장 위치로 이동.
 use crate::{
     ffmpeg, files,
-    model::{Job, Tools},
+    model::{Job, JobSource, Tools},
     runner::{self, RunError},
     ytdlp,
 };
@@ -89,14 +89,26 @@ pub async fn run(
         return Err(PipelineError::Failed(ERR_DIR_UNWRITABLE.into()));
     }
     files::make_part_dir(&cfg.work_dir).map_err(io_fail)?;
+    match &job.source {
+        JobSource::Youtube { url } => download_and_save(job, url, cfg, cancel, &mut report).await,
+        JobSource::File { path, .. } => transcode_file(job, path, cfg, cancel, &mut report).await,
+    }
+}
 
+async fn download_and_save(
+    job: &Job,
+    url: &str,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    report: &mut impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
     report(Report {
         stage: Stage::Downloading,
         progress: 0.0,
         speed: None,
         eta: None,
     });
-    let args = ytdlp::download_args(&job.url, &job.options, &cfg.tools, &cfg.work_dir);
+    let args = ytdlp::download_args(url, &job.options, &cfg.tools, &cfg.work_dir);
     let mut tracker = ytdlp::ProgressTracker::new(ytdlp::expected_streams(&job.options));
     runner::run(&cfg.tools.ytdlp, &args, cancel, |line| {
         if let Some(p) = tracker.feed(line) {
@@ -114,11 +126,56 @@ pub async fn run(
     let downloaded = files::find_media(&cfg.work_dir)
         .map_err(io_fail)?
         .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
-    let media = match encode(job, cfg, cancel, &downloaded, &mut report).await? {
-        Some(encoded) => encoded,
-        None => downloaded,
-    };
-    finalize(cfg, &media)
+    match encode(job, cfg, cancel, &downloaded, report).await? {
+        None => finalize(cfg, &downloaded),
+        Some(encoded) => {
+            // 원본(과 자막)을 먼저 저장 폴더로 옮기고, 그 최종 이름을 기준으로 변환본 이름을 정한다.
+            let original = finalize(cfg, &downloaded)?;
+            let stem = original
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("video");
+            let ext = encoded
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("mp4");
+            let dest = files::variant_path(&cfg.download_dir, stem, ext);
+            files::move_file(&encoded, &dest).map_err(io_fail)?;
+            Ok(dest)
+        }
+    }
+}
+
+/// 로컬 파일 변환: 원본은 읽기만 하고, 결과를 `{원본}-{n}.{확장자}` 로 결과 폴더에 둔다.
+async fn transcode_file(
+    job: &Job,
+    src: &Path,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    report: &mut impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
+    // 재시작이면 이전 부분 출력을 버린다(ffmpeg 는 이어서 인코딩하지 못한다).
+    let _ = fs::remove_dir_all(cfg.work_dir.join("out"));
+    let encoded = encode(job, cfg, cancel, src, report)
+        .await?
+        .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
+    let ext = encoded
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4");
+    // 패키지 이름이 `{stem}-{n}.kiripart` 이므로 같은 번호로 꺼낸다. 이미 있으면 다음 번호.
+    let pkg_stem = cfg
+        .work_dir
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    let mut dest = cfg.download_dir.join(format!("{pkg_stem}.{ext}"));
+    if dest.exists() {
+        let stem = files::safe_title(src.file_stem().and_then(|s| s.to_str()).unwrap_or("file"));
+        dest = files::variant_path(&cfg.download_dir, &stem, ext);
+    }
+    files::move_file(&encoded, &dest).map_err(io_fail)?;
+    Ok(dest)
 }
 
 async fn encode(
@@ -173,8 +230,14 @@ async fn encode_once(
     hw: bool,
     report: &mut impl FnMut(Report),
 ) -> Result<(), RunError> {
-    let args =
-        ffmpeg::encode_args(job.options.preset, hw, input, output).expect("preset with extension");
+    let args = ffmpeg::encode_args(
+        job.options.preset,
+        hw,
+        job.options.max_height,
+        input,
+        output,
+    )
+    .expect("preset with extension");
     let duration = job.duration_secs;
     runner::run(&cfg.tools.ffmpeg, &args, cancel, |line| {
         if let Some(p) = ffmpeg::parse_progress(line, duration) {
@@ -275,7 +338,12 @@ mod tests {
     async fn encodes_when_preset_needs_it() {
         let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
         let (r, reports) = go(&e, Preset::MovProres).await;
-        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video.mov"));
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mov"));
+        assert!(
+            e.cfg.download_dir.join("Fake Video.mp4").exists(),
+            "original kept"
+        );
+        assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
         assert!(
             reports
                 .iter()
@@ -284,10 +352,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn second_conversion_gets_next_index() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(e.cfg.download_dir.join("Fake Video-1.mov"), "earlier").unwrap();
+        let (r, _) = go(&e, Preset::Mp4H264).await;
+        // 원본은 같은 이름이 없으니 Fake Video.mp4, 변환본은 기존 -1 다음인 -2
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-2.mp4"));
+        assert!(e.cfg.download_dir.join("Fake Video.mp4").exists());
+    }
+
+    #[tokio::test]
+    async fn audio_preset_keeps_downloaded_original() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        let (r, _) = go(&e, Preset::Mp3).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp3"));
+        assert!(e.cfg.download_dir.join("Fake Video.mp4").exists());
+    }
+
+    #[tokio::test]
     async fn falls_back_to_software_when_videotoolbox_fails() {
         let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG_VT_FAILS, true);
         let (r, _) = go(&e, Preset::Mp4H264).await;
-        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video.mp4"));
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
         let log = fs::read_to_string(&e.cfg.log_path).unwrap();
         assert!(log.contains("videotoolbox"), "{log}");
     }

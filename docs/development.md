@@ -80,6 +80,7 @@ yarn tauri signer generate -w ~/.tauri/kiri.key   # 암호를 정해 입력
 - 공개키(`~/.tauri/kiri.key.pub` 내용)는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`에 넣습니다. 현재 저장소에는 이미 들어 있습니다.
 - 개인키와 암호를 잃어버리면 이미 설치된 앱에 더 이상 업데이트를 보낼 수 없습니다. 따로 안전하게 보관하세요.
 - 공개키가 비어 있으면 `scripts/latest-json.mjs`가 릴리즈를 거부합니다.
+- 릴리즈 빌드(`--debug` 없는 `yarn tauri build`)는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`가 비어 있거나 `<PUBKEY>`이면 `updater pubkey is empty — see docs/development.md` 오류로 실패합니다.
 
 ### `~/.config/kiri/sign.env` (커밋 금지)
 

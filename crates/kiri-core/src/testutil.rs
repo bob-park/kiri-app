@@ -1,5 +1,5 @@
 //! 테스트 전용 도우미. 실제 yt-dlp/ffmpeg 대신 sh 스크립트를 실행 파일로 쓴다.
-use crate::model::{Job, JobOptions, JobState, Preset, Tools};
+use crate::model::{Job, JobOptions, JobSource, JobState, Preset, Tools};
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -41,13 +41,16 @@ pub fn tools(dir: &Path, ytdlp_body: &str, ffmpeg_body: &str) -> Tools {
         ytdlp: script(dir, "yt-dlp", ytdlp_body),
         deno: dir.join("deno"),
         ffmpeg: script(dir, "ffmpeg", ffmpeg_body),
+        ffprobe: script(dir, "ffprobe", "echo 2.0"),
     }
 }
 
 pub fn job(preset: Preset) -> Job {
     Job {
         id: 1,
-        url: "https://youtu.be/abc123".into(),
+        source: JobSource::Youtube {
+            url: "https://youtu.be/abc123".into(),
+        },
         title: "Fake Video".into(),
         thumbnail: None,
         duration_secs: Some(2.0),
@@ -57,6 +60,7 @@ pub fn job(preset: Preset) -> Job {
             preset,
             subtitles: vec!["ko".into()],
             auto_subtitles: false,
+            max_height: None,
         },
         state: JobState::Downloading,
         progress: 0.0,

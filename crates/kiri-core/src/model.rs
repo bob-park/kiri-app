@@ -1,6 +1,10 @@
 //! 큐와 CLI 가 함께 쓰는 작업 모델. serde 표현이 곧 프론트엔드·CLI 계약이다.
 use serde::{Deserialize, Serialize};
-use std::{fmt, path::PathBuf, str::FromStr};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -67,6 +71,21 @@ impl fmt::Display for Preset {
     }
 }
 
+/// 작업이 다루는 대상: YouTube 링크를 받거나, 로컬 파일을 변환한다.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum JobSource {
+    Youtube {
+        url: String,
+    },
+    File {
+        path: PathBuf,
+        /// None = 원본과 같은 폴더
+        #[serde(default)]
+        output_dir: Option<PathBuf>,
+    },
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct JobOptions {
     /// 비디오 format_id. None 이면 오디오만 받는다.
@@ -75,6 +94,9 @@ pub struct JobOptions {
     pub subtitles: Vec<String>,
     /// subtitles 중 자동 생성 자막이 섞여 있으면 true (--write-auto-subs).
     pub auto_subtitles: bool,
+    /// 변환 해상도 상한(높이). None 이면 원본 해상도.
+    #[serde(default)]
+    pub max_height: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -102,7 +124,7 @@ impl JobState {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Job {
     pub id: u64,
-    pub url: String,
+    pub source: JobSource,
     pub title: String,
     #[serde(default)]
     pub thumbnail: Option<String>,
@@ -130,10 +152,23 @@ pub struct Job {
     pub created_at: u64,
 }
 
+impl Job {
+    /// 결과물이 놓일 폴더. 파일 변환은 지정 폴더(없으면 원본 폴더), 다운로드는 저장 폴더.
+    pub fn result_dir(&self, download_dir: &Path) -> PathBuf {
+        match &self.source {
+            JobSource::Youtube { .. } => download_dir.to_path_buf(),
+            JobSource::File { path, output_dir } => output_dir
+                .clone()
+                .or_else(|| path.parent().map(Path::to_path_buf))
+                .unwrap_or_else(|| download_dir.to_path_buf()),
+        }
+    }
+}
+
 /// 큐에 넣을 작업. UI 는 probe 결과로, CLI 는 Engine::add_url 이 만든다.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NewJob {
-    pub url: String,
+    pub source: JobSource,
     pub title: String,
     pub thumbnail: Option<String>,
     pub duration_secs: Option<f64>,
@@ -147,6 +182,7 @@ pub struct Tools {
     pub ytdlp: PathBuf,
     pub deno: PathBuf,
     pub ffmpeg: PathBuf,
+    pub ffprobe: PathBuf,
 }
 
 #[cfg(test)]
@@ -187,6 +223,24 @@ mod tests {
         );
         let back: JobState = serde_json::from_value(json!({"kind": "encoding"})).unwrap();
         assert_eq!(back, JobState::Encoding);
+    }
+
+    #[test]
+    fn job_source_json_shape() {
+        let y = JobSource::Youtube { url: "u".into() };
+        assert_eq!(
+            serde_json::to_value(&y).unwrap(),
+            json!({"kind": "youtube", "url": "u"})
+        );
+        let f: JobSource =
+            serde_json::from_value(json!({"kind": "file", "path": "/a/b.mkv"})).unwrap();
+        assert_eq!(
+            f,
+            JobSource::File {
+                path: "/a/b.mkv".into(),
+                output_dir: None
+            }
+        );
     }
 
     #[test]

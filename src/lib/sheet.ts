@@ -17,7 +17,7 @@ export function defaultSubtitles(info: VideoInfo, langs: string[]): string[] {
 export function buildNewJob(url: string, info: VideoInfo, quality: Quality | null, preset: Preset, subs: string[]): NewJob {
   const video = quality !== null && !AUDIO_PRESETS.includes(preset) ? quality : null;
   return {
-    url,
+    source: { kind: "youtube", url },
     title: info.title,
     thumbnail: info.thumbnail,
     duration_secs: info.duration_secs,
@@ -27,6 +27,7 @@ export function buildNewJob(url: string, info: VideoInfo, quality: Quality | nul
       preset,
       subtitles: subs,
       auto_subtitles: subs.some((s) => !info.subtitles.includes(s)),
+      max_height: null,
     },
   };
 }

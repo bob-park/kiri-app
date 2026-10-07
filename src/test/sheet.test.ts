@@ -30,8 +30,8 @@ describe("buildNewJob", () => {
   it("video job marks auto subs", () => {
     const j = buildNewJob("u", info, qualities[1], "mp4-h264", ["ko", "ja"]);
     expect(j).toEqual({
-      url: "u", title: "Rust", thumbnail: "th", duration_secs: 144, quality_label: "720p",
-      options: { format_id: "136", preset: "mp4-h264", subtitles: ["ko", "ja"], auto_subtitles: true },
+      source: { kind: "youtube", url: "u" }, title: "Rust", thumbnail: "th", duration_secs: 144, quality_label: "720p",
+      options: { format_id: "136", preset: "mp4-h264", subtitles: ["ko", "ja"], auto_subtitles: true, max_height: null },
     });
   });
   it("audio preset or audio quality drops the video format", () => {

@@ -29,16 +29,22 @@ export type JobState =
   | { kind: "queued" | "downloading" | "encoding" | "completed" | "stopped" }
   | { kind: "failed"; message: string };
 
+export type JobSource =
+  | { kind: "youtube"; url: string }
+  | { kind: "file"; path: string; output_dir: string | null };
+
 export interface JobOptions {
   format_id: string | null;
   preset: Preset;
   subtitles: string[];
   auto_subtitles: boolean;
+  /** 파일 변환의 높이 상한. null = 원본 그대로 */
+  max_height: number | null;
 }
 
 export interface Job {
   id: number;
-  url: string;
+  source: JobSource;
   title: string;
   thumbnail: string | null;
   duration_secs: number | null;
@@ -53,7 +59,7 @@ export interface Job {
   created_at: number;
 }
 
-export type NewJob = Pick<Job, "url" | "title" | "thumbnail" | "duration_secs" | "quality_label" | "options">;
+export type NewJob = Pick<Job, "source" | "title" | "thumbnail" | "duration_secs" | "quality_label" | "options">;
 
 export interface Quality {
   format_id: string;

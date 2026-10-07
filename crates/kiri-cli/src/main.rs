@@ -4,7 +4,11 @@ use kiri_core::{
     ipc::{self, ClientError, Request, Response},
     model::{Job, JobState},
 };
-use std::{path::Path, process::ExitCode, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    process::ExitCode,
+    time::Duration,
+};
 
 const BUNDLE_ID: &str = "org.bobpark.kiri";
 
@@ -41,11 +45,25 @@ enum Cmd {
     Remove { id: u64 },
     /// Stop a running or queued job
     Stop { id: u64 },
+    /// Transcode a local file; the source is left untouched
+    Transcode {
+        source: PathBuf,
+        /// mp4-h264 | mp4-hevc | mov-prores | webm-vp9 | mp3 | m4a
+        #[arg(long)]
+        format: String,
+        /// original | 2160p | 1440p | 1080p | 720p | 480p (never upscales)
+        #[arg(long)]
+        quality: Option<String>,
+        /// Output folder (default: next to the source; created if missing)
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 impl Cmd {
-    fn into_request(self) -> Request {
-        match self {
+    /// Err 는 앱에 보내기 전의 요청 오류(종료 코드 1).
+    fn into_request(self) -> Result<Request, String> {
+        Ok(match self {
             Cmd::Status => Request::Status,
             Cmd::List => Request::List,
             Cmd::Add {
@@ -61,7 +79,27 @@ impl Cmd {
             },
             Cmd::Remove { id } => Request::Remove { id },
             Cmd::Stop { id } => Request::Stop { id },
-        }
+            Cmd::Transcode {
+                source,
+                format,
+                quality,
+                output,
+            } => {
+                let src = std::fs::canonicalize(&source)
+                    .ok()
+                    .filter(|p| p.is_file())
+                    .ok_or_else(|| format!("source not found: {}", source.display()))?;
+                let output = output
+                    .map(|o| std::path::absolute(&o).map_err(|e| format!("{}: {e}", o.display())))
+                    .transpose()?;
+                Request::Transcode {
+                    source: src.display().to_string(),
+                    output: output.map(|o| o.display().to_string()),
+                    format,
+                    quality,
+                }
+            }
+        })
     }
 }
 
@@ -161,10 +199,16 @@ async fn launch_and_wait(socket: &Path) -> bool {
 
 async fn run(cli: Cli) -> ExitCode {
     let socket = ipc::socket_path();
-    let is_add = matches!(cli.cmd, Cmd::Add { .. });
-    let req = cli.cmd.into_request();
+    let launches = matches!(cli.cmd, Cmd::Add { .. } | Cmd::Transcode { .. });
+    let req = match cli.cmd.into_request() {
+        Ok(r) => r,
+        Err(m) => {
+            eprintln!("error: {m}");
+            return ExitCode::from(1);
+        }
+    };
     let mut result = ipc::request(&socket, &req).await;
-    if is_add && result == Err(ClientError::NotRunning) && launch_and_wait(&socket).await {
+    if launches && result == Err(ClientError::NotRunning) && launch_and_wait(&socket).await {
         result = ipc::request(&socket, &req).await;
     }
     match result {
@@ -192,12 +236,12 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kiri_core::model::{JobOptions, Preset};
+    use kiri_core::model::{JobOptions, JobSource, Preset};
 
     fn job(id: u64, state: JobState, progress: f32) -> Job {
         Job {
             id,
-            url: "u".into(),
+            source: JobSource::Youtube { url: "u".into() },
             title: "Rust in 100 Seconds".into(),
             thumbnail: None,
             duration_secs: None,
@@ -207,6 +251,7 @@ mod tests {
                 preset: Preset::Original,
                 subtitles: vec![],
                 auto_subtitles: false,
+                max_height: None,
             },
             state,
             progress,
@@ -261,13 +306,51 @@ mod tests {
         .unwrap();
         assert!(cli.json);
         assert_eq!(
-            cli.cmd.into_request(),
+            cli.cmd.into_request().unwrap(),
             Request::Add {
                 url: "https://youtu.be/x".into(),
                 quality: Some("720p".into()),
                 preset: Some("mp3".into()),
                 subs: Some(vec!["ko".into(), "en".into()]),
             }
+        );
+    }
+
+    #[test]
+    fn transcode_resolves_paths_and_requires_format() {
+        let d = tempfile::tempdir().unwrap();
+        let src = d.path().join("내 영상 01.mkv");
+        std::fs::write(&src, "x").unwrap();
+        let cli = Cli::try_parse_from([
+            "kiri",
+            "transcode",
+            src.to_str().unwrap(),
+            "--format",
+            "mp4-hevc",
+            "--quality",
+            "720p",
+            "--output",
+            d.path().join("new dir").to_str().unwrap(),
+        ])
+        .unwrap();
+        let real = std::fs::canonicalize(d.path()).unwrap();
+        assert_eq!(
+            cli.cmd.into_request().unwrap(),
+            Request::Transcode {
+                source: real.join("내 영상 01.mkv").display().to_string(),
+                output: Some(d.path().join("new dir").display().to_string()),
+                format: "mp4-hevc".into(),
+                quality: Some("720p".into()),
+            }
+        );
+        // --format 은 필수
+        assert!(Cli::try_parse_from(["kiri", "transcode", "a.mkv"]).is_err());
+        // 없는 원본은 앱에 보내기 전에 거부
+        let cli =
+            Cli::try_parse_from(["kiri", "transcode", "/nope/x.mkv", "--format", "mp3"]).unwrap();
+        assert_eq!(
+            cli.cmd.into_request().unwrap_err(),
+            "source not found: /nope/x.mkv"
         );
     }
 }

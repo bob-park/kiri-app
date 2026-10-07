@@ -32,7 +32,8 @@ export function failureText(message: string, t: T): string {
 
 /** 행의 둘째 줄: 화질 · 포맷 · 자막 · 상태별 정보 */
 export function jobDetail(job: Job, t: T): string {
-  const parts = [job.quality_label === "audio" ? t("quality.audio") : job.quality_label, t(`preset.${job.options.preset}`)];
+  const parts = [["audio", "original"].includes(job.quality_label) ? t(`quality.${job.quality_label}`) : job.quality_label, t(`preset.${job.options.preset}`)];
+  if (job.source.kind === "file") parts.unshift(t("job.transcode"));
   if (job.options.subtitles.length) parts.push(t("job.subs", { langs: job.options.subtitles.join(", ") }));
   const s = job.state;
   if (s.kind === "downloading") parts.push([pct(job.progress), job.speed, job.eta].filter(Boolean).join(" · "));

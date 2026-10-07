@@ -4,8 +4,8 @@ import type { Job, JobState } from "../lib/types";
 
 const t = (k: string, o?: Record<string, unknown>) => (o && "langs" in o ? `Subs ${o.langs}` : k);
 const job = (state: JobState, extra: Partial<Job> = {}): Job => ({
-  id: 1, url: "u", title: "t", thumbnail: null, duration_secs: null, quality_label: "1080p60",
-  options: { format_id: "299", preset: "mp4-h264", subtitles: ["ko"], auto_subtitles: false },
+  id: 1, source: { kind: "youtube", url: "u" }, title: "t", thumbnail: null, duration_secs: null, quality_label: "1080p60",
+  options: { format_id: "299", preset: "mp4-h264", subtitles: ["ko"], auto_subtitles: false, max_height: null },
   state, progress: 0.48, speed: "2.1 MB/s", eta: "00:12", output: null, work_dir: null, created_at: 0, ...extra,
 });
 
@@ -23,9 +23,14 @@ describe("format", () => {
     expect(jobDetail(job({ kind: "downloading" }), t)).toBe("1080p60 · preset.mp4-h264 · Subs ko · 48% · 2.1 MB/s · 00:12");
   });
   it("describes audio, encoding and failure", () => {
-    expect(jobDetail(job({ kind: "encoding" }, { quality_label: "audio", options: { format_id: null, preset: "mp3", subtitles: [], auto_subtitles: false } }), t))
+    expect(jobDetail(job({ kind: "encoding" }, { quality_label: "audio", options: { format_id: null, preset: "mp3", subtitles: [], auto_subtitles: false, max_height: null } }), t))
       .toBe("quality.audio · preset.mp3 · state.encoding 48%");
     expect(jobDetail(job({ kind: "failed", message: "ERROR: private" }), t)).toBe("1080p60 · preset.mp4-h264 · Subs ko · ERROR: private");
     expect(failureText("error.no_output", t)).toBe("error.no_output");
+  });
+  it("labels file transcode jobs", () => {
+    const f = job({ kind: "encoding" }, { source: { kind: "file", path: "/a/clip.mkv", output_dir: null }, quality_label: "720p" });
+    expect(jobDetail(f, t)).toBe("job.transcode · 720p · preset.mp4-h264 · Subs ko · state.encoding 48%");
+    expect(jobDetail({ ...f, quality_label: "original" }, t)).toBe("job.transcode · quality.original · preset.mp4-h264 · Subs ko · state.encoding 48%");
   });
 });

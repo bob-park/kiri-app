@@ -14,7 +14,8 @@ use tokio::{
     net::{UnixListener, UnixStream},
 };
 
-pub const PROTOCOL_VERSION: u32 = 1;
+/// v2: 작업 JSON 의 `url` 이 `source` 로 바뀌고 `transcode` 요청이 생겼다.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Envelope<T> {
@@ -41,6 +42,15 @@ pub enum Request {
     },
     Stop {
         id: u64,
+    },
+    /// 로컬 파일 변환. 경로는 절대 경로여야 한다(CLI 가 바꿔 보낸다).
+    Transcode {
+        source: String,
+        #[serde(default)]
+        output: Option<String>,
+        format: String,
+        #[serde(default)]
+        quality: Option<String>,
     },
 }
 
@@ -158,6 +168,18 @@ pub async fn dispatch(engine: &Engine, req: Request) -> Response {
         },
         Request::Remove { id } => done(engine.remove(id)),
         Request::Stop { id } => done(engine.stop(id)),
+        Request::Transcode {
+            source,
+            output,
+            format,
+            quality,
+        } => match engine
+            .add_file(source.into(), output.map(Into::into), &format, quality)
+            .await
+        {
+            Ok(job) => Response::Added { job },
+            Err(e) => e.into(),
+        },
     }
 }
 
@@ -208,6 +230,7 @@ mod tests {
             ytdlp: dir.join("none/yt-dlp"),
             deno: dir.join("none/deno"),
             ffmpeg: dir.join("none/ffmpeg"),
+            ffprobe: dir.join("none/ffprobe"),
         };
         let paths = EnginePaths {
             queue_file: dir.join("q.json"),
@@ -256,6 +279,29 @@ mod tests {
             serde_json::to_value(Response::Ok).unwrap(),
             json!({"type": "ok"})
         );
+        let t = Request::Transcode {
+            source: "/a/b c.mkv".into(),
+            output: None,
+            format: "mp4-hevc".into(),
+            quality: Some("720p".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&t).unwrap(),
+            json!({"type": "transcode", "source": "/a/b c.mkv", "output": null, "format": "mp4-hevc", "quality": "720p"})
+        );
+        let t2: Request =
+            serde_json::from_value(json!({"type": "transcode", "source": "/x", "format": "mp3"}))
+                .unwrap();
+        assert_eq!(
+            t2,
+            Request::Transcode {
+                source: "/x".into(),
+                output: None,
+                format: "mp3".into(),
+                quality: None
+            }
+        );
+        assert_eq!(PROTOCOL_VERSION, 2);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -290,6 +336,21 @@ mod tests {
             matches!(r, Response::Error { ref code, .. } if code == "invalid_url"),
             "{r:?}"
         );
+        let r = request(
+            &path,
+            &Request::Transcode {
+                source: d.path().join("missing.mkv").display().to_string(),
+                output: None,
+                format: "mp4-h264".into(),
+                quality: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            matches!(r, Response::Error { ref code, .. } if code == "source_not_found"),
+            "{r:?}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -304,6 +365,13 @@ mod tests {
         BufReader::new(s).read_line(&mut line).await.unwrap();
         let env: Envelope<Response> = serde_json::from_str(&line).unwrap();
         assert!(matches!(env.body, Response::Error { ref code, .. } if code == "version_mismatch"));
+        let mut s = UnixStream::connect(&path).await.unwrap();
+        s.write_all(b"{\"v\":1,\"body\":{\"type\":\"list\"}}\n")
+            .await
+            .unwrap();
+        let mut line = String::new();
+        BufReader::new(s).read_line(&mut line).await.unwrap();
+        assert!(line.contains("version_mismatch"), "{line}");
     }
 
     #[tokio::test(flavor = "multi_thread")]

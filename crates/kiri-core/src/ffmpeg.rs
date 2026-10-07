@@ -9,7 +9,13 @@ pub fn hw_capable(p: Preset) -> bool {
     matches!(p, Preset::Mp4H264 | Preset::Mp4Hevc | Preset::MovProres)
 }
 
-pub fn encode_args(p: Preset, hw: bool, input: &Path, output: &Path) -> Option<Vec<String>> {
+pub fn encode_args(
+    p: Preset,
+    hw: bool,
+    max_height: Option<u32>,
+    input: &Path,
+    output: &Path,
+) -> Option<Vec<String>> {
     let (video, audio): (&[&str], &[&str]) = match (p, hw) {
         (Preset::Original, _) => return None,
         (Preset::Mp4H264, true) => (&["-c:v", "h264_videotoolbox", "-q:v", "65"], AAC_MP4),
@@ -56,6 +62,10 @@ pub fn encode_args(p: Preset, hw: bool, input: &Path, output: &Path) -> Option<V
         a.extend(["-hwaccel".into(), "videotoolbox".into()]);
     }
     a.extend(["-i".into(), input.display().to_string()]);
+    if let Some(h) = max_height.filter(|_| !p.is_audio_only()) {
+        // 원본보다 키우지 않고, 너비는 비율에 맞춘 짝수
+        a.extend(["-vf".into(), format!("scale=-2:'min({h},ih)'")]);
+    }
     a.extend(video.iter().chain(audio).map(|s| s.to_string()));
     a.extend(["-progress".into(), "pipe:1".into(), "-nostats".into()]);
     a.push(output.display().to_string());
@@ -81,12 +91,49 @@ mod tests {
     use super::*;
 
     fn args(p: Preset, hw: bool) -> Vec<String> {
-        encode_args(p, hw, Path::new("/w/in.webm"), Path::new("/w/out/in.mp4")).unwrap()
+        encode_args(
+            p,
+            hw,
+            None,
+            Path::new("/w/in.webm"),
+            Path::new("/w/out/in.mp4"),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn max_height_scales_video_only() {
+        let a = encode_args(
+            Preset::Mp4H264,
+            true,
+            Some(1080),
+            Path::new("/i.mkv"),
+            Path::new("/o.mp4"),
+        )
+        .unwrap()
+        .join(" ");
+        assert!(
+            a.contains("-i /i.mkv -vf scale=-2:'min(1080,ih)' -c:v h264_videotoolbox"),
+            "{a}"
+        );
+        let mp3 = encode_args(
+            Preset::Mp3,
+            false,
+            Some(720),
+            Path::new("/i.mkv"),
+            Path::new("/o.mp3"),
+        )
+        .unwrap()
+        .join(" ");
+        assert!(!mp3.contains("scale"), "{mp3}");
+        assert!(!args(Preset::Mp4H264, false).join(" ").contains("scale"));
     }
 
     #[test]
     fn original_has_no_encode_step() {
-        assert!(encode_args(Preset::Original, true, Path::new("a"), Path::new("b")).is_none());
+        assert!(
+            encode_args(Preset::Original, true, None, Path::new("a"), Path::new("b")).is_none()
+        );
     }
 
     #[test]

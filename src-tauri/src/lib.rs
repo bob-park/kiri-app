@@ -3,6 +3,8 @@ mod cli_install;
 mod commands;
 mod i18n;
 mod ipc_server;
+#[cfg(test)]
+mod pubkey_check;
 mod quit;
 mod settings;
 mod tray;
@@ -54,6 +56,7 @@ pub fn run() {
                 ytdlp: bin.join("yt-dlp"),
                 deno: bin.join("deno"),
                 ffmpeg: sidecar("ffmpeg"),
+                ffprobe: sidecar("ffprobe"),
             };
             let paths = EnginePaths {
                 queue_file: path.app_local_data_dir()?.join("queue.json"),

@@ -22,6 +22,39 @@ pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
         .expect("unbounded range")
 }
 
+/// dir 안에서 `{stem}-{n}.*` (n ≥ 1, 확장자 무관, 디렉터리 포함) 의 최댓값 + 1. 없으면 1.
+pub fn next_variant_index(dir: &Path, stem: &str) -> u32 {
+    let prefix = format!("{stem}-");
+    let max = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            let rest = name.strip_prefix(&prefix)?;
+            let num = rest.split_once('.').map_or(rest, |(n, _)| n);
+            (!num.is_empty() && num.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| num.parse::<u32>().ok())
+                .flatten()
+        })
+        .max()
+        .unwrap_or(0);
+    max.saturating_add(1)
+}
+
+/// `dir/{stem}-{index}.{ext}`. 계산한 경로가 이미 있으면(대소문자·유니코드 정규화를
+/// 무시하는 파일 시스템) 다음 번호로 넘어가 덮어쓰지 않는다.
+pub fn variant_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
+    let mut i = next_variant_index(dir, stem);
+    loop {
+        let p = dir.join(format!("{stem}-{i}.{ext}"));
+        if !p.exists() || i == u32::MAX {
+            return p;
+        }
+        i += 1;
+    }
+}
+
 /// rename, 볼륨이 다르면 복사 후 삭제.
 pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     match fs::rename(from, to) {
@@ -207,5 +240,61 @@ mod tests {
             subtitle_files(d.path()).unwrap(),
             vec![d.path().join("v.ko.srt")]
         );
+    }
+
+    #[test]
+    fn variant_index_counts_any_extension_and_dirs() {
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(next_variant_index(d.path(), "제목"), 1);
+        assert_eq!(
+            variant_path(d.path(), "제목", "mp4"),
+            d.path().join("제목-1.mp4")
+        );
+        fs::write(d.path().join("제목.webm"), "").unwrap();
+        fs::write(d.path().join("제목-1.mp4"), "").unwrap();
+        fs::create_dir(d.path().join("제목-3.kiripart")).unwrap(); // 진행 중인 변환도 센다
+        assert_eq!(next_variant_index(d.path(), "제목"), 4);
+        assert_eq!(
+            variant_path(d.path(), "제목", "mov"),
+            d.path().join("제목-4.mov")
+        );
+    }
+
+    #[test]
+    fn variant_index_saturates_instead_of_overflowing() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("t-4294967295.mp4"), "").unwrap();
+        assert_eq!(next_variant_index(d.path(), "t"), u32::MAX);
+    }
+
+    #[test]
+    fn variant_path_skips_existing_case_insensitive_match() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("title-1.mp4"), "keep").unwrap();
+        if !d.path().join("TITLE-1.mp4").exists() {
+            return; // 대소문자 구분 파일 시스템에서는 겹치지 않는다
+        }
+        // read_dir 은 "title-1" 만 보므로 "TITLE" 접두사로는 세지 못한다. 그래도 덮어쓰면 안 된다.
+        let p = variant_path(d.path(), "TITLE", "mp4");
+        assert!(!p.exists(), "{p:?}");
+        assert_eq!(p, d.path().join("TITLE-2.mp4"));
+    }
+
+    #[test]
+    fn variant_index_ignores_lookalike_names() {
+        let d = tempfile::tempdir().unwrap();
+        for n in [
+            "제목2-5.mp4",
+            "제목-1a.mp4",
+            "제목-.mp4",
+            "제목-x-9.mp4",
+            "other-7.mp4",
+        ] {
+            fs::write(d.path().join(n), "").unwrap();
+        }
+        assert_eq!(next_variant_index(d.path(), "제목"), 1);
+        fs::write(d.path().join("a-b-3.mp4"), "").unwrap(); // stem 에 '-' 가 있어도 된다
+        assert_eq!(next_variant_index(d.path(), "a-b"), 4);
+        assert_eq!(next_variant_index(d.path(), "a"), 1);
     }
 }

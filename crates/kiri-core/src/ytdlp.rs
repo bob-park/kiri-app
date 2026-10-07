@@ -373,6 +373,7 @@ mod tests {
             ytdlp: "/bin/yt-dlp".into(),
             deno: "/bin/deno".into(),
             ffmpeg: "/app/MacOS/ffmpeg".into(),
+            ffprobe: "/app/MacOS/ffprobe".into(),
         }
     }
 
@@ -486,6 +487,7 @@ mod tests {
             preset: Preset::Mp4H264,
             subtitles: vec!["ko".into(), "ja".into()],
             auto_subtitles: true,
+            max_height: None,
         };
         let a = download_args(
             "https://youtu.be/x",
@@ -517,6 +519,7 @@ mod tests {
             preset: Preset::Mp3,
             subtitles: vec![],
             auto_subtitles: false,
+            max_height: None,
         };
         let a = download_args("u", &o, &tools(), Path::new("/d"));
         assert_eq!(&a[..2], ["-f", "bestaudio"]);
@@ -614,6 +617,7 @@ mod tests {
             preset: Preset::Original,
             subtitles: vec![],
             auto_subtitles: false,
+            max_height: None,
         };
         assert_eq!(expected_streams(&video), 2);
         let audio = JobOptions {
