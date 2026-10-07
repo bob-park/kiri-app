@@ -25,7 +25,7 @@
     "failed": "Failed",
     "stopped": "Stopped"
   },
-  "quality": { "best": "Best", "audio": "Audio only" },
+  "quality": { "best": "Best", "audio": "Audio only", "original": "Original quality" },
   "preset": {
     "original": "Keep original",
     "mp4-h264": "MP4 · H.264",
@@ -112,7 +112,7 @@
     "not_restartable": "That job can't be restarted",
     "bad_quality": "Unknown quality",
     "bad_preset": "Unknown format",
-    "download_dir_unwritable": "Can't write to the download folder",
+    "download_dir_unwritable": "Can't write to the save folder",
     "no_output": "yt-dlp finished but produced no file",
     "source_not_found": "Source file not found",
     "invalid_media": "Not a video or audio file",

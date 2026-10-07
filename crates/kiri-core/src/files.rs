@@ -39,12 +39,20 @@ pub fn next_variant_index(dir: &Path, stem: &str) -> u32 {
         })
         .max()
         .unwrap_or(0);
-    max + 1
+    max.saturating_add(1)
 }
 
-/// `dir/{stem}-{index}.{ext}`
+/// `dir/{stem}-{index}.{ext}`. 계산한 경로가 이미 있으면(대소문자·유니코드 정규화를
+/// 무시하는 파일 시스템) 다음 번호로 넘어가 덮어쓰지 않는다.
 pub fn variant_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
-    dir.join(format!("{stem}-{}.{ext}", next_variant_index(dir, stem)))
+    let mut i = next_variant_index(dir, stem);
+    loop {
+        let p = dir.join(format!("{stem}-{i}.{ext}"));
+        if !p.exists() || i == u32::MAX {
+            return p;
+        }
+        i += 1;
+    }
 }
 
 /// rename, 볼륨이 다르면 복사 후 삭제.
@@ -250,6 +258,26 @@ mod tests {
             variant_path(d.path(), "제목", "mov"),
             d.path().join("제목-4.mov")
         );
+    }
+
+    #[test]
+    fn variant_index_saturates_instead_of_overflowing() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("t-4294967295.mp4"), "").unwrap();
+        assert_eq!(next_variant_index(d.path(), "t"), u32::MAX);
+    }
+
+    #[test]
+    fn variant_path_skips_existing_case_insensitive_match() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("title-1.mp4"), "keep").unwrap();
+        if !d.path().join("TITLE-1.mp4").exists() {
+            return; // 대소문자 구분 파일 시스템에서는 겹치지 않는다
+        }
+        // read_dir 은 "title-1" 만 보므로 "TITLE" 접두사로는 세지 못한다. 그래도 덮어쓰면 안 된다.
+        let p = variant_path(d.path(), "TITLE", "mp4");
+        assert!(!p.exists(), "{p:?}");
+        assert_eq!(p, d.path().join("TITLE-2.mp4"));
     }
 
     #[test]

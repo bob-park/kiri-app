@@ -263,6 +263,12 @@ impl Engine {
                     .ok_or_else(|| EngineError::BadQuality(quality.clone()))?,
             ),
         };
+        // 오디오 프리셋은 해상도가 없다: 화질 대신 "audio" 로 표시한다.
+        let (quality, max_height) = if preset.is_audio_only() {
+            ("audio".to_string(), None)
+        } else {
+            (quality, max_height)
+        };
         let duration_secs = self.media_duration(&path).await?;
         let title = path
             .file_name()
@@ -1271,6 +1277,23 @@ mod tests {
             EngineError::InvalidMedia("x".into()).code(),
             "invalid_media"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn add_file_audio_preset_labels_audio() {
+        let e = env("sleep 30", 1);
+        let src = source_file(e.d.path(), "a.mkv");
+        for q in [None, Some("720p".to_string())] {
+            let j = e
+                .engine
+                .add_file(src.clone(), None, "mp3", q)
+                .await
+                .unwrap();
+            assert_eq!(
+                (j.quality_label.as_str(), j.options.max_height),
+                ("audio", None)
+            );
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]

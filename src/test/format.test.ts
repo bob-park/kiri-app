@@ -31,5 +31,6 @@ describe("format", () => {
   it("labels file transcode jobs", () => {
     const f = job({ kind: "encoding" }, { source: { kind: "file", path: "/a/clip.mkv", output_dir: null }, quality_label: "720p" });
     expect(jobDetail(f, t)).toBe("job.transcode · 720p · preset.mp4-h264 · Subs ko · state.encoding 48%");
+    expect(jobDetail({ ...f, quality_label: "original" }, t)).toBe("job.transcode · quality.original · preset.mp4-h264 · Subs ko · state.encoding 48%");
   });
 });
