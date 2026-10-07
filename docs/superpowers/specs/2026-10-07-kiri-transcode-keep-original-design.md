@@ -94,7 +94,7 @@ pub async fn add_file(&self, path: PathBuf, output_dir: Option<PathBuf>, preset:
 
 - **Youtube:** 다운로드 → (원본 유지가 아니면) 인코딩 → 1.1의 규칙으로 원본과 변환본을 모두 저장합니다.
 - **File:**
-  1. 결과 폴더를 `check_writable`로 확인합니다. 실패하면 `error.download_dir_unwritable`입니다.
+  1. 결과 폴더를 `check_writable`로 확인합니다. 없으면 만들고, 만들 수 없거나 쓸 수 없으면 `error.download_dir_unwritable`입니다.
   2. 결과 폴더에 `{원본 stem}-{index}.kiripart` 패키지를 만들고(엔진의 `work_dir` 할당 규칙 재사용), 그 안의 `out/`에서 ffmpeg로 인코딩합니다.
   3. 끝나면 `variant_path(결과 폴더, 원본 stem, 확장자)`로 옮기고 패키지를 지웁니다. 이동에 실패하면 패키지를 남깁니다.
 - **화질 상한:** 비디오 프리셋이고 `max_height`가 있으면 `-vf scale=-2:'min(<높이>,ih)'`를 추가합니다. 원본보다 키우지 않고, 너비는 비율에 맞춘 짝수입니다. `ffmpeg::encode_args`에 `max_height: Option<u32>` 인자를 추가합니다. 오디오 프리셋에는 넣지 않습니다.
@@ -111,7 +111,7 @@ kiri transcode <source> --format <preset> [--quality original|2160p|1440p|1080p|
 
 - `--format`은 필수입니다. `original`은 받지 않습니다.
 - `--quality`의 기본값은 `original`입니다.
-- `<source>`와 `--output`은 CLI가 `std::fs::canonicalize`로 절대 경로로 바꿔 보냅니다. 앱의 작업 디렉터리가 다르기 때문입니다. 원본을 해석할 수 없으면 앱에 보내지 않고 바로 `error: source not found`를 출력하고 종료 코드 1로 끝냅니다. `--output` 폴더가 없을 때는 그대로 보내서, 앱이 작업 시작 시 오류로 처리합니다.
+- `<source>`와 `--output`은 CLI가 `std::fs::canonicalize`로 절대 경로로 바꿔 보냅니다. 앱의 작업 디렉터리가 다르기 때문입니다. 원본을 해석할 수 없으면 앱에 보내지 않고 바로 `error: source not found`를 출력하고 종료 코드 1로 끝냅니다. `--output` 폴더가 없을 때는 그대로 보내고, 작업이 시작될 때 앱이 만듭니다. 저장 폴더와 같은 동작입니다.
 - 출력과 종료 코드는 `add`와 같습니다.
   - 성공: `added #<id>: <제목>`
   - 요청 오류: 1
@@ -148,7 +148,8 @@ kiri transcode <source> --format <preset> [--quality original|2160p|1440p|1080p|
 | ffprobe가 읽지 못함 | `EngineError::InvalidMedia(msg)` (`invalid_media`) |
 | `original`이거나 알 수 없는 포맷 | `bad_preset` |
 | 알 수 없는 화질 | `bad_quality` |
-| 결과 폴더가 없거나 쓰기 불가 | 작업 시작 시 `Failed(error.download_dir_unwritable)` |
+| 결과 폴더가 없음 | 작업 시작 시 만듦 (저장 폴더와 같은 `check_writable` 동작) |
+| 결과 폴더를 만들 수 없거나 쓰기 불가 | 작업 시작 시 `Failed(error.download_dir_unwritable)` |
 | 인코딩 실패 | 기존과 동일: VideoToolbox → 소프트웨어 1회 재시도, 그래도 실패하면 `Failed`. 패키지 유지 |
 | 작업 도중 원본이 사라짐 | ffmpeg 오류로 `Failed`. 원본 쪽에는 쓰지 않음 |
 | 결과 이동 실패 | 패키지를 지우지 않음 |
