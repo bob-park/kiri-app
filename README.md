@@ -35,6 +35,8 @@ YouTube 링크를 붙여넣으면 원하는 화질과 자막을 골라 내려받
 
 H.264, HEVC, ProRes는 가능하면 Mac의 하드웨어 인코더(VideoToolbox)를 씁니다.
 
+"원본 유지"가 아닌 포맷을 고르면 받은 원본(`제목.webm` 등)은 그대로 두고 변환본을 `제목-1.mp4`처럼 따로 만듭니다. 같은 영상을 다시 변환하면 `제목-2.mp4`가 됩니다.
+
 ### 다운로드 중
 
 - 받는 동안 저장 폴더(기본 `~/Movies/kiri`)에 **`제목.kiripart`**가 생기고 점점 커집니다. 다 받으면 `제목.mp4` 같은 완성 파일로 바뀝니다.
@@ -67,11 +69,14 @@ kiri list                    # 전체 큐
 kiri add <url> [--quality best|1080p|720p|audio] [--format original|mp4-h264|mp4-hevc|mov-prores|webm-vp9|mp3|m4a] [--subs ko,en]
 kiri stop <id>               # 작업 중지
 kiri remove <id>             # 작업 삭제 (받은 파일은 남음)
+kiri transcode <파일> --format mp4-h264|mp4-hevc|mov-prores|webm-vp9|mp3|m4a [--quality original|2160p|1440p|1080p|720p|480p] [--output <폴더>]
 kiri list --json             # 다른 프로그램이 읽기 좋은 JSON 출력
 ```
 
+- `kiri transcode`는 원본을 그대로 두고 `<원본 이름>-<번호>.<확장자>`를 만듭니다(예: `clip.mkv` → `clip-1.mp4`, 다시 변환하면 `clip-2.mp4`). 결과는 `--output` 폴더(없으면 만듭니다), 생략하면 원본과 같은 폴더에 생깁니다. `--quality`는 높이 상한이며 원본보다 키우지 않습니다(기본 `original`).
+- `--json` 출력의 작업에는 출처가 `"source": {"kind": "youtube", "url": …}` 또는 `{"kind": "file", "path": …, "output_dir": …}`로 들어 있습니다.
 - 생략한 옵션은 앱 설정의 기본값을 따릅니다.
-- `kiri add`는 앱이 꺼져 있으면 앱을 실행한 뒤 추가합니다. 나머지 명령은 앱이 꺼져 있으면 종료 코드 2로 끝납니다.
+- `kiri add`와 `kiri transcode`는 앱이 꺼져 있으면 앱을 실행한 뒤 추가합니다. 나머지 명령은 앱이 꺼져 있으면 종료 코드 2로 끝납니다.
 - 종료 코드: 성공 0, 요청 오류 1, 앱 연결 실패 2
 
 ## 업데이트
