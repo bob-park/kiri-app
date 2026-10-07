@@ -3,6 +3,8 @@ mod cli_install;
 mod commands;
 mod i18n;
 mod ipc_server;
+#[cfg(test)]
+mod pubkey_check;
 mod quit;
 mod settings;
 mod tray;
