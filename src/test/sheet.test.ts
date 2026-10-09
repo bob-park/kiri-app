@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildNewJob, defaultSubtitles, pickDefaultQuality, rememberPatch } from "../lib/sheet";
+import { buildNewJob, defaultSubtitles, pickDefaultQuality, rememberPatch, visiblePresets } from "../lib/sheet";
 import type { Quality, VideoInfo } from "../lib/types";
 
 const q = (format_id: string, height: number, label: string): Quality => ({ format_id, height, fps: null, vcodec: "AVC", filesize: null, label });
@@ -46,5 +46,14 @@ describe("rememberPatch", () => {
       download: { quality: "1080p", preset: "mp4-hevc", subtitles: ["ko"], skip_sheet: true },
     });
     expect(rememberPatch(null, "mp3", []).download?.quality).toBe("audio");
+  });
+});
+
+describe("visiblePresets", () => {
+  it("shows up to three common formats, always including the default, in PRESETS order", () => {
+    expect(visiblePresets("original")).toEqual(["original", "mp4-h264", "mp3"]);
+    expect(visiblePresets("mp4-h264")).toEqual(["original", "mp4-h264", "mp3"]);
+    expect(visiblePresets("webm-vp9")).toEqual(["original", "mp4-h264", "webm-vp9"]);
+    expect(visiblePresets("m4a")).toEqual(["original", "mp4-h264", "m4a"]);
   });
 });

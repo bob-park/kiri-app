@@ -21,4 +21,5 @@ export const api = {
   updateStatus: () => invoke<UpdateInfo | null>("update_status"),
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
   installUpdate: (afterQueue: boolean) => invoke<void>("install_update", { afterQueue }),
+  retryUpdateDownload: () => invoke<void>("retry_update_download"),
 };

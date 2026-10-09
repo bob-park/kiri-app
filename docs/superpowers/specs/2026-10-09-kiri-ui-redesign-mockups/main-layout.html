@@ -1,0 +1,176 @@
+<style>
+  .k { font-family: "Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, sans-serif; color:#101114; background:#fff; border-radius:12px; overflow:hidden; font-size:13px; box-shadow: rgba(0,0,0,0.08) 0 8px 32px; border:1px solid #dedee5; position:relative; height:430px; display:flex; flex-direction:column; }
+  .k * { box-sizing:border-box; }
+  .k .tb { height:38px; display:flex; align-items:center; gap:7px; padding:0 12px; flex-shrink:0; }
+  .k .dot { width:11px; height:11px; border-radius:50%; background:#dedee5; }
+  .k .logo { font-weight:800; letter-spacing:-0.5px; font-size:15px; }
+  .k .logo i { color:#7132f5; font-style:normal; }
+  .k .ib { width:28px; height:28px; border-radius:10px; display:grid; place-items:center; color:#686b82; font-size:14px; }
+  .k .ib:hover { background:rgba(148,151,169,0.12); }
+  .k .muted { color:#9497a9; font-size:11px; }
+  .k .grow { flex:1; min-width:0; }
+  .k .title { font-weight:600; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .k .thumb { width:72px; height:42px; border-radius:8px; flex-shrink:0; }
+  .k .t1 { background:linear-gradient(135deg,#7132f5,#c4b0ff); }
+  .k .t2 { background:linear-gradient(135deg,#149e61,#9ee6c4); }
+  .k .t3 { background:linear-gradient(135deg,#f59e0b,#fde3a7); }
+  .k .t4 { background:linear-gradient(135deg,#484b5e,#9497a9); }
+  .k .prog { height:5px; background:#ececf2; border-radius:9999px; overflow:hidden; margin-top:6px; }
+  .k .prog > i { display:block; height:100%; background:#7132f5; border-radius:9999px; }
+  .k .prog.enc > i { background:#5741d8; }
+  .k .chip { font-size:10px; font-weight:600; border-radius:6px; padding:2px 7px; white-space:nowrap; }
+  .k .c-ok { background:rgba(20,158,97,0.16); color:#026b3f; }
+  .k .c-run { background:rgba(133,91,251,0.16); color:#5b1ecf; }
+  .k .c-q { background:rgba(104,107,130,0.12); color:#484b5e; }
+  .k .c-err { background:rgba(211,58,74,0.14); color:#a8202f; }
+  .k .btn { background:#7132f5; color:#fff; border-radius:12px; padding:7px 13px; font-weight:600; font-size:12px; white-space:nowrap; }
+  .k .btn-sub { background:rgba(133,91,251,0.16); color:#7132f5; border-radius:10px; padding:5px 10px; font-weight:600; font-size:11px; white-space:nowrap; }
+  /* toast */
+  .k .toast { position:absolute; background:#101114; color:#fff; border-radius:12px; padding:10px 12px; width:250px; box-shadow: rgba(16,17,20,0.25) 0 10px 30px; font-size:12px; }
+  .k .toast .tt { display:flex; align-items:center; gap:8px; font-weight:600; }
+  .k .toast .sub { color:#b4b6c6; font-size:10.5px; margin-top:3px; line-height:1.4; }
+  .k .toast .prog { background:rgba(255,255,255,0.15); margin-top:8px; height:4px; }
+  .k .toast .prog > i { background:#a98bff; }
+  .k .spin { width:12px; height:12px; border-radius:50%; border:2px solid rgba(255,255,255,0.25); border-top-color:#a98bff; flex-shrink:0; }
+  /* A */
+  .k .paste { margin:6px 14px 10px; border:1.5px dashed #c9b8fd; background:rgba(133,91,251,0.05); border-radius:14px; padding:10px 12px; display:flex; align-items:center; gap:10px; }
+  .k .paste .ic { width:30px; height:30px; border-radius:10px; background:rgba(133,91,251,0.16); color:#7132f5; display:grid; place-items:center; font-weight:700; }
+  .k .kbd { font-family:ui-monospace,monospace; background:#fff; border:1px solid #dedee5; border-bottom-width:2px; border-radius:6px; padding:1px 5px; font-size:10px; color:#484b5e; }
+  .k .card { margin:0 14px 8px; border:1px solid #ececf2; border-radius:14px; padding:9px 10px; display:flex; gap:10px; align-items:center; box-shadow: rgba(16,24,40,0.04) 0 1px 4px; }
+  /* B */
+  .k .side { width:150px; background:#f8f8fb; border-right:1px solid #ececf2; padding:4px 10px 10px; flex-shrink:0; display:flex; flex-direction:column; }
+  .k .nav { padding:7px 9px; border-radius:10px; font-size:12px; color:#484b5e; margin-bottom:2px; display:flex; justify-content:space-between; }
+  .k .nav.on { background:rgba(133,91,251,0.16); color:#5b1ecf; font-weight:600; }
+  .k .nav b { font-weight:600; color:#9497a9; font-size:11px; }
+  .k .nav.on b { color:#7132f5; }
+  .k .row { display:flex; gap:10px; align-items:center; padding:9px 14px; border-bottom:1px solid #f2f2f6; }
+  .k .seg { display:inline-flex; background:rgba(148,151,169,0.1); border-radius:10px; padding:2px; }
+  .k .seg span { padding:4px 9px; border-radius:8px; font-size:11px; color:#686b82; }
+  .k .seg span.on { background:#fff; color:#101114; font-weight:600; box-shadow: rgba(16,24,40,0.08) 0 1px 3px; }
+  /* C */
+  .k .hero { margin:4px 14px 12px; border-radius:16px; padding:14px; background:linear-gradient(135deg,#7132f5 0%,#5741d8 100%); color:#fff; display:flex; gap:12px; align-items:center; }
+  .k .hero .thumb { width:96px; height:56px; background:linear-gradient(135deg,#c4b0ff,#fff); opacity:.9; }
+  .k .hero .prog { background:rgba(255,255,255,0.22); height:6px; }
+  .k .hero .prog > i { background:#fff; }
+  .k .mini { display:flex; gap:9px; align-items:center; padding:7px 10px; border-radius:12px; }
+  .k .mini:hover { background:#f6f6f9; }
+  .k .mini .thumb { width:44px; height:26px; border-radius:6px; }
+  .k .fab { position:absolute; left:50%; transform:translateX(-50%); bottom:14px; background:#fff; border:1px solid #ececf2; border-radius:14px; padding:5px; display:flex; gap:4px; box-shadow: rgba(16,24,40,0.12) 0 8px 24px; }
+  .k .fab span { padding:6px 10px; border-radius:10px; font-size:11px; color:#484b5e; }
+  .k .fab span.p { background:#7132f5; color:#fff; font-weight:600; }
+</style>
+
+<h2>메인 창 리디자인: 어떤 방향이 좋을까요?</h2>
+<p class="subtitle">셋 다 docs/design(Kraken 보라 #7132f5, 12px radius, 아주 옅은 그림자) 기준이고, 실제 창 크기(720×520) 비율입니다. 오른쪽 아래 검은 카드가 <b>'다운로드 준비 중' 토스트</b>예요(상단 배너 대체). 마음에 드는 걸 클릭하고, 섞고 싶은 부분은 터미널에 말씀해 주세요.</p>
+
+<div class="cards">
+
+  <!-- A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px; background:#f3f3f7;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span style="width:8px"></span><span class="logo">kiri<i>.</i></span><span class="grow"></span>
+          <span class="ib">⌫</span><span class="ib">⚙</span></div>
+        <div class="paste">
+          <div class="ic">↓</div>
+          <div class="grow"><div style="font-weight:600;font-size:12.5px">YouTube 링크를 붙여넣거나 끌어다 놓으세요</div>
+            <div class="muted" style="margin-top:2px"><span class="kbd">⌘</span> <span class="kbd">V</span> 로 바로 추가</div></div>
+        </div>
+        <div style="padding:0 16px 6px;display:flex;justify-content:space-between" class="muted"><span style="font-weight:600;color:#484b5e">다운로드 4</span><span>진행 중 2 · 완료 1</span></div>
+        <div style="overflow:hidden">
+          <div class="card"><div class="thumb t1"></div><div class="grow"><div class="title">Lo-fi Beats to Study — 3 Hour Mix</div>
+            <div class="muted">1080p · MP4 H.264 · 412 MB · 남은 시간 1분</div><div class="prog"><i style="width:62%"></i></div></div><span class="chip c-run">62%</span></div>
+          <div class="card"><div class="thumb t3"></div><div class="grow"><div class="title">Rust in 100 Seconds</div>
+            <div class="muted">인코딩 중 · HEVC</div><div class="prog enc"><i style="width:30%"></i></div></div><span class="chip c-run">30%</span></div>
+          <div class="card"><div class="thumb t2"></div><div class="grow"><div class="title">WWDC Keynote Highlights</div>
+            <div class="muted">4K · MOV ProRes · 2.1 GB</div></div><span class="chip c-ok">완료</span></div>
+        </div>
+        <div class="toast" style="right:14px;bottom:14px">
+          <div class="tt"><span class="spin"></span>다운로드 준비 중…</div>
+          <div class="sub">처음 실행이라 필요한 구성 요소를 받고 있어요.</div>
+          <div class="prog"><i style="width:45%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 드롭존 + 카드 리스트</h3>
+      <p>상단에 큰 붙여넣기/드롭 영역이 항상 보이고, 작업은 둥근 카드로 쌓입니다. 처음 쓰는 사용자도 뭘 해야 할지 바로 보임. 구조 변경은 가장 적음.</p>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px; background:#f3f3f7;">
+      <div class="k" style="flex-direction:row">
+        <div class="side">
+          <div class="tb" style="padding:0 2px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="logo" style="padding:6px 9px 12px">kiri<i>.</i></div>
+          <div class="nav on">전체 <b>4</b></div>
+          <div class="nav">진행 중 <b>2</b></div>
+          <div class="nav">완료 <b>1</b></div>
+          <div class="nav">실패 <b>1</b></div>
+          <div class="grow"></div>
+          <div class="nav">⚙ 설정</div>
+        </div>
+        <div class="grow" style="display:flex;flex-direction:column">
+          <div class="tb" style="height:46px;padding:0 14px">
+            <div style="flex:1;border:1px solid #dedee5;border-radius:12px;padding:7px 10px;color:#9497a9;font-size:12px">🔗 링크 붙여넣기 (⌘V)</div>
+            <span class="btn">추가</span></div>
+          <div class="row"><div class="thumb t1"></div><div class="grow"><div class="title">Lo-fi Beats to Study — 3 Hour Mix</div>
+            <div class="muted">1080p · MP4 · 62% · 1분 남음</div><div class="prog"><i style="width:62%"></i></div></div><span class="ib">❚❚</span></div>
+          <div class="row"><div class="thumb t3"></div><div class="grow"><div class="title">Rust in 100 Seconds</div>
+            <div class="muted">인코딩 중 · 30%</div><div class="prog enc"><i style="width:30%"></i></div></div><span class="ib">❚❚</span></div>
+          <div class="row"><div class="thumb t2"></div><div class="grow"><div class="title">WWDC Keynote Highlights</div>
+            <div class="muted">4K · MOV · 2.1 GB</div></div><span class="chip c-ok">완료</span></div>
+          <div class="row"><div class="thumb t4"></div><div class="grow"><div class="title">Private video</div>
+            <div class="muted" style="color:#d33a4a">영상을 볼 수 없습니다</div></div><span class="chip c-err">실패</span></div>
+        </div>
+        <div class="toast" style="right:14px;bottom:14px">
+          <div class="tt"><span class="spin"></span>다운로드 준비 중…</div>
+          <div class="sub">처음 실행이라 필요한 구성 요소를 받고 있어요.</div>
+          <div class="prog"><i style="width:45%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 사이드바 + 상태 필터</h3>
+      <p>왼쪽에 상태별 필터(개수 표시), 위에 명시적인 링크 입력칸. 작업이 많을 때 정리가 쉬움. 대신 720px 창에서 리스트 폭이 좁아지고 구현 범위가 가장 큼.</p>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:14px; background:#f3f3f7;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span style="width:8px"></span><span class="logo">kiri<i>.</i></span><span class="grow"></span>
+          <span class="seg"><span class="on">전체</span><span>진행 중</span><span>완료</span></span><span class="ib">⚙</span></div>
+        <div class="hero">
+          <div class="thumb"></div>
+          <div class="grow"><div style="font-size:10px;opacity:.75;font-weight:600;letter-spacing:.4px">지금 받는 중</div>
+            <div class="title" style="font-size:14px;margin-top:2px">Lo-fi Beats to Study — 3 Hour Mix</div>
+            <div class="prog"><i style="width:62%"></i></div>
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;opacity:.85;margin-top:5px"><span>256 / 412 MB · 4.2 MB/s</span><span>62%</span></div></div>
+        </div>
+        <div style="padding:0 14px" class="muted"><span style="font-weight:600;color:#484b5e">대기열</span></div>
+        <div style="padding:4px 8px">
+          <div class="mini"><div class="thumb t3"></div><div class="grow"><div class="title" style="font-size:12px">Rust in 100 Seconds</div></div><span class="chip c-run">인코딩 30%</span></div>
+          <div class="mini"><div class="thumb t2"></div><div class="grow"><div class="title" style="font-size:12px">WWDC Keynote Highlights</div></div><span class="chip c-ok">완료</span></div>
+          <div class="mini"><div class="thumb t4"></div><div class="grow"><div class="title" style="font-size:12px">Private video</div></div><span class="chip c-err">실패</span></div>
+        </div>
+        <div class="fab"><span class="p">＋ 링크 붙여넣기 ⌘V</span><span>⌫ 완료 정리</span></div>
+        <div class="toast" style="right:14px;bottom:62px;width:220px">
+          <div class="tt"><span class="spin"></span>다운로드 준비 중…</div>
+          <div class="sub">구성 요소를 받고 있어요.</div>
+          <div class="prog"><i style="width:45%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 포커스 히어로 + 하단 액션바</h3>
+      <p>현재 받는 작업을 보라색 히어로 카드로 크게, 나머지는 콤팩트 리스트. 하단 플로팅 바에 주요 동작. 가장 "앱 같고" 화려하지만 동시 다운로드가 여러 개면 히어로 규칙이 애매해짐.</p>
+    </div>
+  </div>
+
+</div>

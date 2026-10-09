@@ -142,6 +142,11 @@ pub async fn install_update(app: AppHandle, after_queue: bool) -> Result<(), Str
 }
 
 #[tauri::command]
+pub fn retry_update_download(app: AppHandle) {
+    crate::updater::start_download(&app);
+}
+
+#[tauri::command]
 pub fn open_settings(app: AppHandle) -> CmdResult<()> {
     Ok(crate::windows::show_settings(&app)?)
 }

@@ -19,3 +19,12 @@ export const useTools = create<ToolsStore>((set) => ({
     };
   },
 }));
+
+export type ToolsToast = "hidden" | "preparing" | "failed";
+
+/** 메인 창의 '다운로드 준비 중' 토스트 상태. 예전 상단 배너와 같은 규칙. */
+export function toolsToast(s: ToolsStatus | null): ToolsToast {
+  if (s?.ready) return "hidden";
+  if (s?.error && !s.installing) return "failed";
+  return "preparing";
+}

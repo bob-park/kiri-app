@@ -1,7 +1,9 @@
 {
   "app": {
     "clearCompleted": "完了した項目を消去",
-    "dropHint": "YouTube のリンクをペースト（⌘V）またはドロップ",
+    "dropTitle": "YouTube のリンクをペーストまたはドロップ",
+    "dropShortcut": "ですぐに追加",
+    "emptyDesc": "ペーストしたリンクがここに表示されます",
     "empty": "まだダウンロードはありません",
     "settings": "設定",
     "toolsPreparing": "ダウンロードの準備中…",
@@ -9,6 +11,7 @@
     "toolsFailed": "ダウンロードの準備に失敗しました: {{error}}",
     "retry": "再試行"
   },
+  "toast": { "close": "閉じる" },
   "job": {
     "stop": "停止",
     "remove": "削除",
@@ -36,6 +39,7 @@
     "m4a": "M4A (AAC)"
   },
   "sheet": {
+    "more": "もっと見る",
     "loading": "動画情報を読み込み中…",
     "quality": "画質",
     "format": "出力フォーマット",
@@ -47,15 +51,23 @@
     "download": "ダウンロード"
   },
   "update": {
-    "available": "kiri {{version}} が利用可能です",
-    "install": "インストールして再起動",
     "installNow": "今すぐ再起動",
     "afterQueue": "キュー完了後に再起動",
     "scheduled": "キューが終わると kiri が再起動します",
-    "downloading": "アップデートをダウンロード中… {{pct}}%"
+    "downloadingBg": "v{{version}} をダウンロード中…",
+    "ready": "新しいバージョン v{{version}}",
+    "restartInstall": "再起動してインストール",
+    "installMenu": "インストール…",
+    "readyTitle": "kiri v{{version}} のインストール準備ができました",
+    "busyDesc": "{{n}} 件のダウンロードが進行中です。再起動するとキューに戻り、その後再開します。",
+    "downloadFailed": "アップデートのダウンロードに失敗",
+    "retry": "再試行",
+    "installing": "インストール中…"
   },
+  "status": { "running": "進行中 {{n}}", "queued": "待機 {{n}}", "completed": "完了 {{n}}", "failed": "失敗 {{n}}" },
   "settings": {
     "tab": { "general": "一般", "download": "ダウンロード", "cli": "CLI", "update": "アップデート" },
+    "group": { "display": "表示", "window": "ウインドウ", "save": "保存", "defaults": "デフォルト", "performance": "パフォーマンス" },
     "general": {
       "language": "言語",
       "langSystem": "システム",

@@ -3,14 +3,15 @@ import { useTranslation } from "react-i18next";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { api } from "../lib/tauri";
 import { useQueue } from "../lib/queue";
-import { useTools } from "../lib/tools";
+import { toolsToast, useTools } from "../lib/tools";
 import { useSettings } from "../lib/settings";
-import { showError } from "../lib/toast";
+import { showError, useToasts } from "../lib/toast";
 import { extractUrl, isEditableTarget } from "../lib/paste";
 import { JobRow } from "../components/JobRow";
 import { Icon } from "../components/Icon";
 import { OptionsSheet } from "../components/OptionsSheet";
-import { UpdateBanner } from "../components/UpdateBanner";
+import { DropZone } from "../components/DropZone";
+import { StatusBar } from "../components/StatusBar";
 import type { VideoInfo } from "../lib/types";
 
 interface SheetState {
@@ -18,35 +19,31 @@ interface SheetState {
   info: VideoInfo | null;
 }
 
-function ToolsNotice() {
+/** 첫 실행 등 도구가 준비되지 않았을 때 상단 배너 대신 지속 토스트를 띄운다. */
+function useToolsToast() {
   const { t } = useTranslation();
   const status = useTools((s) => s.status);
-  if (status?.ready) return null;
-  const failed = status?.error && !status.installing;
-  if (failed) {
-    return (
-      <div role="status" className="mx-3 mt-2 flex items-center gap-2 rounded-xl bg-error/15 px-3 py-2 text-sm text-error">
-        <span className="flex-1">{t("app.toolsFailed", { error: status!.error })}</span>
-        <button className="btn btn-xs" onClick={() => api.updateTools().catch(showError)}>{t("app.retry")}</button>
-      </div>
-    );
-  }
-  return (
-    <div role="status" aria-live="polite" className="mx-3 mt-2 rounded-xl bg-secondary px-3 py-2.5 text-secondary-content">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <span className="loading loading-spinner loading-sm" />
-        {t("app.toolsPreparing")}
-      </div>
-      <p className="mt-1 text-xs">{t("app.toolsPreparingDesc")}</p>
-      <progress className="progress progress-primary mt-2 h-1.5 w-full" aria-label={t("app.toolsPreparing")} />
-    </div>
-  );
+  const kind = toolsToast(status);
+  const error = status?.error;
+  useEffect(() => {
+    const { push, dismissKey } = useToasts.getState();
+    if (kind === "hidden") dismissKey("tools");
+    else if (kind === "failed")
+      push({
+        key: "tools", kind: "error", sticky: true,
+        text: t("app.toolsFailed", { error }),
+        action: { label: t("app.retry"), run: () => void api.updateTools().catch(showError) },
+      });
+    else push({ key: "tools", kind: "progress", sticky: true, progress: null, text: t("app.toolsPreparing"), desc: t("app.toolsPreparingDesc") });
+  }, [kind, error, t]);
 }
 
 export default function MainWindow() {
   const { t } = useTranslation();
+  useToolsToast();
   const jobs = useQueue((s) => s.jobs);
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [dragging, setDragging] = useState(false);
   // 시트가 열려 있으면 ⌘V·드롭을 무시한다(열린 시트를 덮어쓰지 않게). keydown effect가 낡지 않도록 ref로 읽는다.
   const sheetUrl = useRef<string | null>(null);
   sheetUrl.current = sheet?.url ?? null;
@@ -82,6 +79,12 @@ export default function MainWindow() {
     }
   }, []);
 
+  // ⌘V와 드롭존 클릭이 같이 쓴다. 시트가 열려 있으면 무시한다.
+  const paste = useCallback(() => {
+    if (sheetUrl.current !== null) return;
+    submit(readText().catch(() => null));
+  }, [submit]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -92,38 +95,54 @@ export default function MainWindow() {
         if (sheetUrl.current !== null) return;
         e.preventDefault();
         if (e.repeat) return;
-        submit(readText().catch(() => null));
+        paste();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [submit]);
+  }, [paste]);
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
+    setDragging(false);
     if (sheetUrl.current !== null) return;
     submit(e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain"));
   };
 
   return (
-    <div className="flex h-full flex-col" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      <header className="flex items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-2">
-        <span className="font-bold tracking-tight">kiri</span>
-        <span className="flex-1 truncate text-center text-xs text-fg-muted">{t("app.dropHint")}</span>
+    <div
+      className="flex h-full flex-col"
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragging) setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        // 자식 요소 사이를 오갈 때가 아니라 창 밖으로 나갈 때만 끈다.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={onDrop}
+    >
+      <header className="flex h-[42px] shrink-0 items-center gap-1 px-4">
+        <span className="text-[15px] font-extrabold tracking-[-0.5px]">kiri<span className="text-primary">.</span></span>
+        <span className="flex-1" />
         {jobs.some((j) => j.state.kind === "completed") && (
-          <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.clearCompleted")} title={t("app.clearCompleted")} onClick={() => api.clearCompleted().catch(showError)}><Icon name="clear" /></button>
+          <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.clearCompleted")} title={t("app.clearCompleted")} onClick={() => api.clearCompleted().catch(showError)}><Icon name="clear" className="h-4 w-4" /></button>
         )}
-        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" /></button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" className="h-4 w-4" /></button>
       </header>
-      <UpdateBanner />
-      <ToolsNotice />
-      <main className="flex-1 overflow-y-auto">
+      <DropZone dragging={dragging} onClick={paste} />
+      <main className="flex-1 overflow-y-auto pb-1.5">
         {jobs.length === 0 ? (
-          <div className="grid h-full place-items-center text-sm text-fg-muted">{t("app.empty")}</div>
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center">
+            <span className="mb-1 grid h-10 w-10 place-items-center rounded-xl bg-base-200 text-fg-muted"><Icon name="download" /></span>
+            <span className="text-sm font-semibold">{t("app.empty")}</span>
+            <span className="text-xs text-fg-muted">{t("app.emptyDesc")}</span>
+          </div>
         ) : (
           [...jobs].reverse().map((j) => <JobRow key={j.id} job={j} />)
         )}
       </main>
+      <StatusBar />
       {sheet && <OptionsSheet url={sheet.url} info={sheet.info} onClose={() => setSheet(null)} />}
     </div>
   );

@@ -1,0 +1,96 @@
+<style>
+  .cards { grid-template-columns: 1fr !important; max-width: 780px; margin: 0 auto; gap: 2rem !important; }
+  .card-image { aspect-ratio: auto !important; display: block !important; }
+  .k { font-family: "Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, sans-serif; color:#101114; background:#fff; border-radius:12px; overflow:hidden; font-size:13px; box-shadow: rgba(0,0,0,0.08) 0 8px 32px; border:1px solid #dedee5; position:relative; width:720px; height:520px; margin:0 auto; display:flex; flex-direction:column; }
+  .k * { box-sizing:border-box; }
+  .k .tb { height:38px; display:flex; align-items:center; gap:7px; padding:0 12px; flex-shrink:0; }
+  .k .dot { width:11px; height:11px; border-radius:50%; background:#dedee5; }
+  .k .logo { font-weight:800; letter-spacing:-0.5px; font-size:15px; }
+  .k .logo i { color:#7132f5; font-style:normal; }
+  .k .ib { width:28px; height:28px; border-radius:10px; display:grid; place-items:center; color:#686b82; font-size:14px; }
+  .k .muted { color:#9497a9; font-size:11px; }
+  .k .grow { flex:1; min-width:0; }
+  .k .title { font-weight:600; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .k .thumb { width:72px; height:42px; border-radius:8px; flex-shrink:0; }
+  .k .t1 { background:linear-gradient(135deg,#7132f5,#c4b0ff); }
+  .k .t2 { background:linear-gradient(135deg,#149e61,#9ee6c4); }
+  .k .t3 { background:linear-gradient(135deg,#f59e0b,#fde3a7); }
+  .k .prog { height:5px; background:#ececf2; border-radius:9999px; overflow:hidden; margin-top:6px; }
+  .k .prog > i { display:block; height:100%; background:#7132f5; border-radius:9999px; }
+  .k .chip { font-size:10px; font-weight:600; border-radius:6px; padding:2px 7px; white-space:nowrap; }
+  .k .c-ok { background:rgba(20,158,97,0.16); color:#026b3f; }
+  .k .c-run { background:rgba(133,91,251,0.16); color:#5b1ecf; }
+  .k .paste { margin:6px 14px 10px; border:1.5px dashed #c9b8fd; background:rgba(133,91,251,0.05); border-radius:14px; padding:10px 12px; display:flex; align-items:center; gap:10px; }
+  .k .paste .ic { width:30px; height:30px; border-radius:10px; background:rgba(133,91,251,0.16); color:#7132f5; display:grid; place-items:center; font-weight:700; }
+  .k .kbd { font-family:ui-monospace,monospace; background:#fff; border:1px solid #dedee5; border-bottom-width:2px; border-radius:6px; padding:1px 5px; font-size:10px; color:#484b5e; }
+  .k .card { margin:0 14px 8px; border:1px solid #ececf2; border-radius:14px; padding:9px 10px; display:flex; gap:10px; align-items:center; box-shadow: rgba(16,24,40,0.04) 0 1px 4px; }
+  .k .sb { height:32px; flex-shrink:0; border-top:1px solid #ececf2; background:#fafafc; display:flex; align-items:center; gap:10px; padding:0 14px; font-size:11px; color:#686b82; }
+  .k .sb .sep { width:1px; height:12px; background:#dedee5; }
+  .k .upd { display:flex; align-items:center; gap:6px; background:rgba(133,91,251,0.12); color:#5b1ecf; border-radius:8px; padding:3px 4px 3px 8px; font-weight:600; }
+  .k .upd .go { background:#7132f5; color:#fff; border-radius:6px; padding:2px 8px; font-size:10.5px; }
+  .k .upd.dl { background:transparent; color:#686b82; font-weight:500; padding:0; }
+  .k .ring { width:11px; height:11px; border-radius:50%; border:2px solid #dedee5; border-top-color:#7132f5; }
+  .k .pdot { width:7px; height:7px; border-radius:50%; background:#7132f5; }
+  .k .pop { position:absolute; right:12px; bottom:40px; width:250px; background:#fff; border:1px solid #ececf2; border-radius:14px; padding:12px; box-shadow: rgba(16,17,20,0.16) 0 12px 32px; }
+  .k .btn { background:#7132f5; color:#fff; border-radius:12px; padding:7px 12px; font-weight:600; font-size:11.5px; text-align:center; }
+  .k .btn-g { background:rgba(148,151,169,0.12); color:#101114; border-radius:12px; padding:7px 12px; font-size:11.5px; text-align:center; }
+</style>
+
+<h2>하단 상태 막대 + 백그라운드 업데이트</h2>
+<p class="subtitle">메인 A 아래쪽에 얇은 상태 막대를 둡니다. 왼쪽은 큐 요약(목록 위 요약을 여기로 옮김), 오른쪽은 업데이트 상태. 같은 화면의 업데이트 단계 3개입니다.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="dl" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:20px; background:#f3f3f7;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="width:8px"></span><span class="logo">kiri<i>.</i></span><span class="grow"></span><span class="ib">⌫</span><span class="ib">⚙</span></div>
+        <div class="paste"><div class="ic">↓</div><div class="grow"><div style="font-weight:600;font-size:12.5px">YouTube 링크를 붙여넣거나 끌어다 놓으세요</div><div class="muted" style="margin-top:2px"><span class="kbd">⌘</span> <span class="kbd">V</span> 로 바로 추가</div></div></div>
+        <div class="grow" style="overflow:hidden">
+          <div class="card"><div class="thumb t1"></div><div class="grow"><div class="title">Lo-fi Beats to Study — 3 Hour Mix</div><div class="muted">1080p · MP4 H.264 · 412 MB · 남은 시간 1분</div><div class="prog"><i style="width:62%"></i></div></div><span class="chip c-run">62%</span></div>
+          <div class="card"><div class="thumb t2"></div><div class="grow"><div class="title">WWDC Keynote Highlights</div><div class="muted">4K · MOV ProRes · 2.1 GB</div></div><span class="chip c-ok">완료</span></div>
+        </div>
+        <div class="sb"><span>진행 중 1</span><span class="sep"></span><span>완료 1</span><span class="grow"></span>
+          <span class="upd dl"><span class="ring"></span>v0.3.0 받는 중… 48%</span></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>① 새 버전 발견 → 백그라운드 다운로드</h3><p>자동 확인으로 새 버전을 찾으면 바로 조용히 받기 시작. 상태 막대에 작은 회색 진행 표시만. 클릭할 것 없음.</p></div>
+  </div>
+
+  <div class="card" data-choice="ready" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:20px; background:#f3f3f7;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="width:8px"></span><span class="logo">kiri<i>.</i></span><span class="grow"></span><span class="ib">⌫</span><span class="ib">⚙</span></div>
+        <div class="paste"><div class="ic">↓</div><div class="grow"><div style="font-weight:600;font-size:12.5px">YouTube 링크를 붙여넣거나 끌어다 놓으세요</div><div class="muted" style="margin-top:2px"><span class="kbd">⌘</span> <span class="kbd">V</span> 로 바로 추가</div></div></div>
+        <div class="grow" style="overflow:hidden">
+          <div class="card"><div class="thumb t2"></div><div class="grow"><div class="title">WWDC Keynote Highlights</div><div class="muted">4K · MOV ProRes · 2.1 GB</div></div><span class="chip c-ok">완료</span></div>
+        </div>
+        <div class="sb"><span>완료 1</span><span class="grow"></span>
+          <span class="upd"><span class="pdot"></span>새 버전 v0.3.0 <span class="go">재시작하여 설치</span></span></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>② 받기 완료, 큐가 비어 있음</h3><p>보라색 알약 + "재시작하여 설치" 버튼. 누르면 이미 받은 파일로 바로 설치·재시작(다시 받지 않음).</p></div>
+  </div>
+
+  <div class="card" data-choice="busy" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:20px; background:#f3f3f7;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="width:8px"></span><span class="logo">kiri<i>.</i></span><span class="grow"></span><span class="ib">⌫</span><span class="ib">⚙</span></div>
+        <div class="paste"><div class="ic">↓</div><div class="grow"><div style="font-weight:600;font-size:12.5px">YouTube 링크를 붙여넣거나 끌어다 놓으세요</div><div class="muted" style="margin-top:2px"><span class="kbd">⌘</span> <span class="kbd">V</span> 로 바로 추가</div></div></div>
+        <div class="grow" style="overflow:hidden">
+          <div class="card"><div class="thumb t1"></div><div class="grow"><div class="title">Lo-fi Beats to Study — 3 Hour Mix</div><div class="muted">1080p · MP4 H.264 · 412 MB · 남은 시간 1분</div><div class="prog"><i style="width:62%"></i></div></div><span class="chip c-run">62%</span></div>
+          <div class="card"><div class="thumb t3"></div><div class="grow"><div class="title">Rust in 100 Seconds</div><div class="muted">대기</div></div></div>
+        </div>
+        <div class="pop">
+          <div style="font-weight:700;font-size:12.5px">kiri v0.3.0 설치 준비 완료</div>
+          <div class="muted" style="margin-top:3px;line-height:1.5">다운로드 2개가 진행 중이에요. 재시작하면 대기열로 돌아가 다시 이어집니다.</div>
+          <div style="display:flex;gap:6px;margin-top:10px"><div class="btn-g grow">지금 재시작</div><div class="btn grow">큐가 끝나면</div></div>
+        </div>
+        <div class="sb"><span>진행 중 1</span><span class="sep"></span><span>대기 1</span><span class="grow"></span>
+          <span class="upd"><span class="pdot"></span>새 버전 v0.3.0 <span class="go">설치…</span></span></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>③ 받기 완료, 다운로드 진행 중일 때 클릭</h3><p>작은 팝오버로 "지금 재시작 / 큐가 끝나면" 선택(지금 배너의 두 버튼과 같은 동작). 예약하면 상태 막대 문구가 "큐가 끝나면 재시작됩니다"로 바뀜.</p></div>
+  </div>
+
+</div>

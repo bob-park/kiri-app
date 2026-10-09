@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { errorText } from "../lib/toast";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { errorText, useToasts, TOAST_MS } from "../lib/toast";
 
 const dict: Record<string, string> = {
   "error.invalid_url": "Not YouTube",
@@ -24,5 +24,52 @@ describe("errorText", () => {
   it("translates i18n-key strings and passes raw strings through", () => {
     expect(errorText("error.no_output", t)).toBe("No file");
     expect(errorText(new Error("boom"), t)).toBe("boom");
+  });
+});
+
+describe("toast store", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useToasts.setState({ toasts: [] });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const push = useToasts.getState().push;
+
+  it("auto-dismisses plain toasts", () => {
+    push({ kind: "info", text: "hi" });
+    expect(useToasts.getState().toasts).toHaveLength(1);
+    vi.advanceTimersByTime(TOAST_MS);
+    expect(useToasts.getState().toasts).toHaveLength(0);
+  });
+
+  it("keeps sticky toasts", () => {
+    push({ kind: "progress", text: "prep", sticky: true });
+    vi.advanceTimersByTime(TOAST_MS * 3);
+    expect(useToasts.getState().toasts).toHaveLength(1);
+  });
+
+  it("replaces a toast with the same key in place", () => {
+    const a = push({ key: "tools", kind: "progress", text: "prep", sticky: true });
+    push({ kind: "info", text: "other" });
+    const b = push({ key: "tools", kind: "error", text: "failed", sticky: true });
+    const { toasts } = useToasts.getState();
+    expect(b).toBe(a);
+    expect(toasts.map((x) => x.text)).toEqual(["failed", "other"]);
+  });
+
+  it("an earlier timer does not close a toast that became sticky", () => {
+    push({ key: "k", kind: "info", text: "short" });
+    push({ key: "k", kind: "error", text: "long", sticky: true });
+    vi.advanceTimersByTime(TOAST_MS * 2);
+    expect(useToasts.getState().toasts.map((x) => x.text)).toEqual(["long"]);
+  });
+
+  it("dismissKey removes by key and ignores unknown keys", () => {
+    push({ key: "tools", kind: "progress", text: "prep", sticky: true });
+    useToasts.getState().dismissKey("nope");
+    expect(useToasts.getState().toasts).toHaveLength(1);
+    useToasts.getState().dismissKey("tools");
+    expect(useToasts.getState().toasts).toHaveLength(0);
   });
 });

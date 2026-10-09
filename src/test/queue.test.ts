@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasActive, isIdle } from "../lib/queue";
+import { hasActive, isIdle, queueSummary } from "../lib/queue";
 import type { Job, JobState } from "../lib/types";
 
 const job = (state: JobState): Job => ({
@@ -17,5 +17,15 @@ describe("queue helpers", () => {
     expect(isIdle([job({ kind: "completed" }), job({ kind: "failed", message: "x" })])).toBe(true);
     expect(isIdle([job({ kind: "queued" })])).toBe(false);
     expect(isIdle([])).toBe(true);
+  });
+  it("queueSummary groups running states and drops zero counts", () => {
+    expect(queueSummary([])).toEqual([]);
+    expect(
+      queueSummary([
+        job({ kind: "downloading" }), job({ kind: "encoding" }), job({ kind: "queued" }),
+        job({ kind: "completed" }), job({ kind: "stopped" }),
+      ]),
+    ).toEqual([["running", 2], ["queued", 1], ["completed", 1]]);
+    expect(queueSummary([job({ kind: "failed", message: "x" })])).toEqual([["failed", 1]]);
   });
 });
