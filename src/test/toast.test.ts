@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { errorText, useToasts, TOAST_MS } from "../lib/toast";
+import { errorText, useToasts, TOAST_MS, withLeaving, type Toast } from "../lib/toast";
 
 const dict: Record<string, string> = {
   "error.invalid_url": "Not YouTube",
@@ -71,5 +71,19 @@ describe("toast store", () => {
     expect(useToasts.getState().toasts).toHaveLength(1);
     useToasts.getState().dismissKey("tools");
     expect(useToasts.getState().toasts).toHaveLength(0);
+  });
+});
+
+describe("withLeaving", () => {
+  const t = (id: number, text = `t${id}`): Toast => ({ id, kind: "info", text });
+
+  it("keeps removed toasts in place, marked leaving, and appends new ones", () => {
+    const shown = withLeaving([], [t(1), t(2), t(3)]);
+    expect(withLeaving(shown, [t(1), t(3), t(4)])).toEqual([t(1), { ...t(2), leaving: true }, t(3), t(4)]);
+  });
+
+  it("updates live toasts in place and revives nothing by accident", () => {
+    expect(withLeaving([t(1, "old")], [t(1, "new")])).toEqual([t(1, "new")]);
+    expect(withLeaving([{ ...t(1), leaving: true }], [])).toEqual([{ ...t(1), leaving: true }]);
   });
 });

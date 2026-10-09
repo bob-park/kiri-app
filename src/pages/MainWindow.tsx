@@ -44,6 +44,9 @@ export default function MainWindow() {
   const jobs = useQueue((s) => s.jobs);
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [dragging, setDragging] = useState(false);
+  // WebKit 은 dragleave 의 relatedTarget 을 비워 주기도 해서, 자식 경계를 넘을 때마다 꺼졌다 켜졌다 한다.
+  // 들어온 횟수를 세어 창 밖으로 완전히 나갔을 때만 끈다.
+  const dragDepth = useRef(0);
   // 시트가 열려 있으면 ⌘V·드롭을 무시한다(열린 시트를 덮어쓰지 않게). keydown effect가 낡지 않도록 ref로 읽는다.
   const sheetUrl = useRef<string | null>(null);
   sheetUrl.current = sheet?.url ?? null;
@@ -104,6 +107,7 @@ export default function MainWindow() {
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
+    dragDepth.current = 0;
     setDragging(false);
     if (sheetUrl.current !== null) return;
     submit(e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain"));
@@ -112,13 +116,14 @@ export default function MainWindow() {
   return (
     <div
       className="flex h-full flex-col"
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!dragging) setDragging(true);
+      onDragOver={(e) => e.preventDefault()}
+      onDragEnter={() => {
+        dragDepth.current += 1;
+        setDragging(true);
       }}
-      onDragLeave={(e) => {
-        // 자식 요소 사이를 오갈 때가 아니라 창 밖으로 나갈 때만 끈다.
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragging(false);
       }}
       onDrop={onDrop}
     >

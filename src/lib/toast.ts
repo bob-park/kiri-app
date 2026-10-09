@@ -15,6 +15,14 @@ export interface Toast {
   sticky?: boolean;
 }
 export type ToastInput = Omit<Toast, "id">;
+export type ShownToast = Toast & { leaving?: boolean };
+
+/** 화면에 그릴 목록. 스토어에서 빠진 토스트는 퇴장 애니메이션 동안 제자리에 leaving 으로 남긴다. */
+export function withLeaving(shown: ShownToast[], live: Toast[]): ShownToast[] {
+  const byId = new Map(live.map((x) => [x.id, x]));
+  const kept = shown.map((s) => byId.get(s.id) ?? (s.leaving ? s : { ...s, leaving: true }));
+  return [...kept, ...live.filter((x) => !shown.some((s) => s.id === x.id))];
+}
 
 interface ToastStore {
   toasts: Toast[];

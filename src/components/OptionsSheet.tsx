@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/tauri";
 import { useSettings } from "../lib/settings";
@@ -33,6 +34,12 @@ export function OptionsSheet({ url, info, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allPresets, setAllPresets] = useState(false);
+  const presetGroup = useRef<HTMLDivElement>(null);
+  // "더보기" 버튼은 펼치면 사라지므로, 키보드 포커스를 선택된 포맷 칩으로 옮겨 자리를 잃지 않게 한다.
+  const showAllPresets = () => {
+    flushSync(() => setAllPresets(true));
+    presetGroup.current?.querySelector<HTMLInputElement>("input:checked")?.focus();
+  };
 
   useEffect(() => {
     if (!info) return;
@@ -156,10 +163,10 @@ export function OptionsSheet({ url, info, onClose }: Props) {
             </Section>
 
             <Section label={t("sheet.format")}>
-              <div role="radiogroup" aria-label={t("sheet.format")}>
+              <div ref={presetGroup} role="radiogroup" aria-label={t("sheet.format")}>
                 {(allPresets ? PRESETS : visiblePresets(defaults.preset)).map(presetChip)}
                 {!allPresets && (
-                  <button type="button" className={chipCls(false)} onClick={() => setAllPresets(true)}>{t("sheet.more")} ▾</button>
+                  <button type="button" className={chipCls(false)} onClick={showAllPresets}>{t("sheet.more")} ▾</button>
                 )}
               </div>
             </Section>

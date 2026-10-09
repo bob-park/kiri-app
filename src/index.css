@@ -53,5 +53,10 @@ body { background: var(--color-base-100); color: var(--color-base-content); font
 }
 
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
 .animate-toast-in { animation: toast-in 150ms ease-out; }
-@media (prefers-reduced-motion: reduce) { .animate-toast-in { animation: none; } }
+.animate-toast-out { animation: toast-out 150ms ease-in forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in { animation: none; }
+  .animate-toast-out { animation: none; opacity: 0; }
+}
