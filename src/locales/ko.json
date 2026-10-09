@@ -1,7 +1,9 @@
 {
   "app": {
     "clearCompleted": "완료 항목 정리",
-    "dropHint": "YouTube 링크를 붙여넣거나(⌘V) 끌어다 놓으세요",
+    "dropTitle": "YouTube 링크를 붙여넣거나 끌어다 놓으세요",
+    "dropShortcut": "로 바로 추가",
+    "emptyDesc": "링크를 붙여넣으면 여기에 나타나요",
     "empty": "아직 다운로드가 없습니다",
     "settings": "설정",
     "toolsPreparing": "다운로드 준비 중…",
@@ -48,13 +50,20 @@
     "download": "다운로드"
   },
   "update": {
-    "available": "kiri {{version}} 버전을 사용할 수 있습니다",
-    "install": "설치 후 재시작",
     "installNow": "지금 재시작",
     "afterQueue": "큐가 끝나면 재시작",
     "scheduled": "큐가 끝나면 kiri가 재시작됩니다",
-    "downloading": "업데이트 받는 중… {{pct}}%"
+    "downloadingBg": "v{{version}} 받는 중…",
+    "ready": "새 버전 v{{version}}",
+    "restartInstall": "재시작하여 설치",
+    "installMenu": "설치…",
+    "readyTitle": "kiri v{{version}} 설치 준비 완료",
+    "busyDesc": "다운로드 {{n}}개가 진행 중이에요. 재시작하면 대기열로 돌아가 다시 이어집니다.",
+    "downloadFailed": "업데이트 받기 실패",
+    "retry": "다시 시도",
+    "installing": "설치 중…"
   },
+  "status": { "running": "진행 중 {{n}}", "queued": "대기 {{n}}", "completed": "완료 {{n}}", "failed": "실패 {{n}}" },
   "settings": {
     "tab": { "general": "일반", "download": "다운로드", "cli": "CLI", "update": "업데이트" },
     "general": {

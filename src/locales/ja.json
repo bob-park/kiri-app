@@ -1,7 +1,9 @@
 {
   "app": {
     "clearCompleted": "完了した項目を消去",
-    "dropHint": "YouTube のリンクをペースト（⌘V）またはドロップ",
+    "dropTitle": "YouTube のリンクをペーストまたはドロップ",
+    "dropShortcut": "ですぐに追加",
+    "emptyDesc": "ペーストしたリンクがここに表示されます",
     "empty": "まだダウンロードはありません",
     "settings": "設定",
     "toolsPreparing": "ダウンロードの準備中…",
@@ -48,13 +50,20 @@
     "download": "ダウンロード"
   },
   "update": {
-    "available": "kiri {{version}} が利用可能です",
-    "install": "インストールして再起動",
     "installNow": "今すぐ再起動",
     "afterQueue": "キュー完了後に再起動",
     "scheduled": "キューが終わると kiri が再起動します",
-    "downloading": "アップデートをダウンロード中… {{pct}}%"
+    "downloadingBg": "v{{version}} をダウンロード中…",
+    "ready": "新しいバージョン v{{version}}",
+    "restartInstall": "再起動してインストール",
+    "installMenu": "インストール…",
+    "readyTitle": "kiri v{{version}} のインストール準備ができました",
+    "busyDesc": "{{n}} 件のダウンロードが進行中です。再起動するとキューに戻り、その後再開します。",
+    "downloadFailed": "アップデートのダウンロードに失敗",
+    "retry": "再試行",
+    "installing": "インストール中…"
   },
+  "status": { "running": "進行中 {{n}}", "queued": "待機 {{n}}", "completed": "完了 {{n}}", "failed": "失敗 {{n}}" },
   "settings": {
     "tab": { "general": "一般", "download": "ダウンロード", "cli": "CLI", "update": "アップデート" },
     "general": {

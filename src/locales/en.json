@@ -1,7 +1,9 @@
 {
   "app": {
     "clearCompleted": "Clear completed",
-    "dropHint": "Paste a YouTube link (⌘V) or drop it here",
+    "dropTitle": "Paste or drop a YouTube link",
+    "dropShortcut": "to add it right away",
+    "emptyDesc": "Links you paste will show up here",
     "empty": "No downloads yet",
     "settings": "Settings",
     "toolsPreparing": "Getting ready to download…",
@@ -48,13 +50,20 @@
     "download": "Download"
   },
   "update": {
-    "available": "kiri {{version}} is available",
-    "install": "Install and restart",
     "installNow": "Restart now",
     "afterQueue": "Restart when queue finishes",
     "scheduled": "kiri will restart when the queue finishes",
-    "downloading": "Downloading update… {{pct}}%"
+    "downloadingBg": "Downloading v{{version}}…",
+    "ready": "New version v{{version}}",
+    "restartInstall": "Restart to install",
+    "installMenu": "Install…",
+    "readyTitle": "kiri v{{version}} is ready to install",
+    "busyDesc": "{{n}} downloads are in progress. Restarting puts them back in the queue and they continue afterwards.",
+    "downloadFailed": "Update download failed",
+    "retry": "Try again",
+    "installing": "Installing…"
   },
+  "status": { "running": "{{n}} running", "queued": "{{n}} queued", "completed": "{{n}} done", "failed": "{{n}} failed" },
   "settings": {
     "tab": { "general": "General", "download": "Downloads", "cli": "CLI", "update": "Updates" },
     "general": {

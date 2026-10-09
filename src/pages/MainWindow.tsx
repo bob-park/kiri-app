@@ -10,7 +10,8 @@ import { extractUrl, isEditableTarget } from "../lib/paste";
 import { JobRow } from "../components/JobRow";
 import { Icon } from "../components/Icon";
 import { OptionsSheet } from "../components/OptionsSheet";
-import { UpdateBanner } from "../components/UpdateBanner";
+import { DropZone } from "../components/DropZone";
+import { StatusBar } from "../components/StatusBar";
 import type { VideoInfo } from "../lib/types";
 
 interface SheetState {
@@ -42,6 +43,7 @@ export default function MainWindow() {
   useToolsToast();
   const jobs = useQueue((s) => s.jobs);
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [dragging, setDragging] = useState(false);
   // 시트가 열려 있으면 ⌘V·드롭을 무시한다(열린 시트를 덮어쓰지 않게). keydown effect가 낡지 않도록 ref로 읽는다.
   const sheetUrl = useRef<string | null>(null);
   sheetUrl.current = sheet?.url ?? null;
@@ -77,6 +79,12 @@ export default function MainWindow() {
     }
   }, []);
 
+  // ⌘V와 드롭존 클릭이 같이 쓴다. 시트가 열려 있으면 무시한다.
+  const paste = useCallback(() => {
+    if (sheetUrl.current !== null) return;
+    submit(readText().catch(() => null));
+  }, [submit]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -87,37 +95,54 @@ export default function MainWindow() {
         if (sheetUrl.current !== null) return;
         e.preventDefault();
         if (e.repeat) return;
-        submit(readText().catch(() => null));
+        paste();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [submit]);
+  }, [paste]);
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
+    setDragging(false);
     if (sheetUrl.current !== null) return;
     submit(e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain"));
   };
 
   return (
-    <div className="flex h-full flex-col" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      <header className="flex items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-2">
-        <span className="font-bold tracking-tight">kiri</span>
-        <span className="flex-1 truncate text-center text-xs text-fg-muted">{t("app.dropHint")}</span>
+    <div
+      className="flex h-full flex-col"
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragging) setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        // 자식 요소 사이를 오갈 때가 아니라 창 밖으로 나갈 때만 끈다.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={onDrop}
+    >
+      <header className="flex h-[42px] shrink-0 items-center gap-1 px-4">
+        <span className="text-[15px] font-extrabold tracking-[-0.5px]">kiri<span className="text-primary">.</span></span>
+        <span className="flex-1" />
         {jobs.some((j) => j.state.kind === "completed") && (
-          <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.clearCompleted")} title={t("app.clearCompleted")} onClick={() => api.clearCompleted().catch(showError)}><Icon name="clear" /></button>
+          <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.clearCompleted")} title={t("app.clearCompleted")} onClick={() => api.clearCompleted().catch(showError)}><Icon name="clear" className="h-4 w-4" /></button>
         )}
-        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" /></button>
+        <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" className="h-4 w-4" /></button>
       </header>
-      <UpdateBanner />
-      <main className="flex-1 overflow-y-auto">
+      <DropZone dragging={dragging} onClick={paste} />
+      <main className="flex-1 overflow-y-auto pb-1.5">
         {jobs.length === 0 ? (
-          <div className="grid h-full place-items-center text-sm text-fg-muted">{t("app.empty")}</div>
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center">
+            <span className="mb-1 grid h-10 w-10 place-items-center rounded-xl bg-base-200 text-fg-muted"><Icon name="download" /></span>
+            <span className="text-sm font-semibold">{t("app.empty")}</span>
+            <span className="text-xs text-fg-muted">{t("app.emptyDesc")}</span>
+          </div>
         ) : (
           [...jobs].reverse().map((j) => <JobRow key={j.id} job={j} />)
         )}
       </main>
+      <StatusBar />
       {sheet && <OptionsSheet url={sheet.url} info={sheet.info} onClose={() => setSheet(null)} />}
     </div>
   );
