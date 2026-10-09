@@ -76,7 +76,9 @@ export function StatusBar() {
         </Fragment>
       ))}
       <span className="flex-1" />
-      <UpdateStatus pending={pending} />
+      <span role="status">
+        <UpdateStatus pending={pending} />
+      </span>
     </footer>
   );
 }

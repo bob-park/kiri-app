@@ -59,7 +59,7 @@
     "restartInstall": "Restart to install",
     "installMenu": "Install…",
     "readyTitle": "kiri v{{version}} is ready to install",
-    "busyDesc": "{{n}} downloads are in progress. Restarting puts them back in the queue and they continue afterwards.",
+    "busyDesc": "Downloads in progress: {{n}}. Restarting puts them back in the queue and they continue afterwards.",
     "downloadFailed": "Update download failed",
     "retry": "Try again",
     "installing": "Installing…"

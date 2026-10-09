@@ -134,7 +134,6 @@ pub fn start_download(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = download(&app, &update).await;
-        DOWNLOADING.store(false, Ordering::SeqCst);
         // 받은 버전이 아직 보관 중인 버전일 때만 결과를 쓴다.
         let outcome = {
             let state = app.state::<UpdateState>();
@@ -147,6 +146,9 @@ pub fn start_download(app: &AppHandle) {
                 _ => None,
             }
         };
+        // 결과를 slot 에 쓴 뒤에 끈다 — 그 사이 check 가 ready=false·downloading=false 를 보지 않게.
+        // 아래 start_download 재호출보다는 먼저여야 한다.
+        DOWNLOADING.store(false, Ordering::SeqCst);
         match outcome {
             Some(Ok(i)) => {
                 let _ = app.emit("update-ready", i);
