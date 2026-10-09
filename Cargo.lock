@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "kiri-app"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "kiri-core",
  "serde",
@@ -2263,7 +2263,7 @@ dependencies = [
 
 [[package]]
 name = "kiri-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap",
  "kiri-core",
@@ -2274,7 +2274,7 @@ dependencies = [
 
 [[package]]
 name = "kiri-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libc",
  "reqwest 0.12.28",
