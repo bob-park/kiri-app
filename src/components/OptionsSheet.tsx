@@ -5,7 +5,7 @@ import { useSettings } from "../lib/settings";
 import { errorText, showError } from "../lib/toast";
 import { langName } from "../lib/i18n";
 import { formatBytes, formatDuration } from "../lib/format";
-import { buildNewJob, defaultSubtitles, pickDefaultQuality, rememberPatch } from "../lib/sheet";
+import { buildNewJob, defaultSubtitles, pickDefaultQuality, rememberPatch, visiblePresets } from "../lib/sheet";
 import { PRESETS, type Preset, type Quality, type VideoInfo } from "../lib/types";
 
 interface Props {
@@ -16,8 +16,8 @@ interface Props {
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mt-3">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-muted">{label}</div>
+    <div className="mt-3.5">
+      <div className="mb-1.5 text-[10.5px] font-bold text-fg-muted">{label}</div>
       {children}
     </div>
   );
@@ -32,6 +32,7 @@ export function OptionsSheet({ url, info, onClose }: Props) {
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allPresets, setAllPresets] = useState(false);
 
   useEffect(() => {
     if (!info) return;
@@ -75,27 +76,37 @@ export function OptionsSheet({ url, info, onClose }: Props) {
     onClose();
   };
 
-  const qualityRow = (q: Quality | null) => {
+  const qualityTile = (q: Quality | null) => {
     const on = (q?.format_id ?? null) === (quality?.format_id ?? null);
     return (
       <label
         key={q?.format_id ?? "audio"}
-        className={`mb-1 flex cursor-pointer items-center justify-between rounded-lg border px-3 py-1.5 text-sm ${
-          on ? "border-primary bg-secondary font-semibold text-secondary-content" : "border-base-300"
+        className={`cursor-pointer rounded-[10px] border px-2.5 py-1.5 has-focus-visible:outline-2 has-focus-visible:outline-primary ${
+          on ? "border-[1.5px] border-primary bg-primary/8" : "border-base-300 hover:border-primary/50"
         }`}
       >
-        <span>
-          <input type="radio" name="quality" className="sr-only" checked={on} onChange={() => setQuality(q)} />
-          {q ? `${q.label} · ${q.vcodec}` : t("quality.audio")}
-        </span>
-        <span className="text-xs text-fg-muted">{q ? formatBytes(q.filesize) : ""}</span>
+        <input type="radio" name="quality" className="sr-only" checked={on} onChange={() => setQuality(q)} />
+        <span className={`block text-[12px] font-semibold ${on ? "text-secondary-content" : ""}`}>{q ? q.label : t("quality.audio")}</span>
+        <span className="block truncate text-[10px] text-fg-muted">{q ? [q.vcodec, formatBytes(q.filesize)].filter(Boolean).join(" · ") : "m4a"}</span>
       </label>
     );
   };
 
+  const chipCls = (on: boolean) =>
+    `mr-1 mb-1 inline-flex cursor-pointer items-center rounded-lg border px-2.5 py-1 text-[11px] has-focus-visible:outline-2 has-focus-visible:outline-primary ${
+      on ? "border-primary bg-primary font-semibold text-primary-content" : "border-base-300 text-base-content/80 hover:border-primary/50"
+    }`;
+
+  const presetChip = (p: Preset) => (
+    <label key={p} className={chipCls(preset === p)}>
+      <input type="radio" name="preset" className="sr-only" checked={preset === p} onChange={() => setPreset(p)} />
+      {t(`preset.${p}`)}
+    </label>
+  );
+
   const subChip = (l: string) => (
-    <label key={l} className="mr-1 mb-1 inline-flex cursor-pointer items-center gap-1 rounded-lg border border-base-300 px-2 py-0.5 text-xs">
-      <input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={subs.includes(l)} onChange={() => toggleSub(l)} />
+    <label key={l} className={chipCls(subs.includes(l))}>
+      <input type="checkbox" className="sr-only" checked={subs.includes(l)} onChange={() => toggleSub(l)} />
       {langName(l, i18n.language)}
     </label>
   );
@@ -105,7 +116,7 @@ export function OptionsSheet({ url, info, onClose }: Props) {
       ref={dialogRef}
       tabIndex={-1}
       aria-label={info?.title ?? t("sheet.loading")}
-      className="mx-auto mt-0 h-fit max-h-[88vh] w-[min(520px,94vw)] max-w-none overflow-y-auto rounded-b-2xl bg-base-100 p-0 text-base-content shadow-xl outline-none backdrop:bg-black/30"
+      className="float-shadow m-auto h-fit max-h-[88vh] w-[min(380px,92vw)] max-w-none overflow-y-auto rounded-[18px] bg-base-100 p-0 text-base-content outline-none backdrop:bg-black/30"
       onCompositionStart={() => (composing.current = true)}
       onCompositionEnd={() => (composing.current = false)}
       onCancel={(e) => {
@@ -114,33 +125,43 @@ export function OptionsSheet({ url, info, onClose }: Props) {
       }}
       onClick={(e) => e.target === dialogRef.current && onClose()}
     >
-      <div className="p-4">
-        {!info ? (
-          <div className="flex items-center gap-3 py-6 text-sm">
+      {!info ? (
+        <div>
+          <div className="h-[110px] animate-pulse bg-base-200" />
+          <div className="flex items-center gap-3 p-4 text-sm">
             <span className="loading loading-spinner loading-sm" />
             {t("sheet.loading")}
           </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-3">
-              {info.thumbnail && <img src={info.thumbnail} alt="" className="h-12 w-20 rounded-md object-cover" />}
-              <div className="min-w-0">
-                <div className="truncate font-semibold">{info.title}</div>
-                <div className="text-xs text-fg-muted">{[info.channel, formatDuration(info.duration_secs)].filter(Boolean).join(" · ")}</div>
-              </div>
+        </div>
+      ) : (
+        <>
+          <div className="relative h-[110px] bg-gradient-to-br from-primary to-secondary">
+            {info.thumbnail && <img src={info.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent from-30% to-black/75" />
+            {info.duration_secs != null && (
+              <span className="absolute top-2.5 right-2.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white">{formatDuration(info.duration_secs)}</span>
+            )}
+            <div className="absolute right-3.5 bottom-2.5 left-3.5 text-white">
+              <div className="truncate text-[13.5px] font-semibold">{info.title}</div>
+              {info.channel && <div className="truncate text-[11px] opacity-80">{info.channel}</div>}
             </div>
+          </div>
 
+          <div className="px-4 pt-0.5 pb-4">
             <Section label={t("sheet.quality")}>
-              {info.qualities.map(qualityRow)}
-              {qualityRow(null)}
+              <div role="radiogroup" aria-label={t("sheet.quality")} className="grid grid-cols-3 gap-1.5">
+                {info.qualities.map(qualityTile)}
+                {qualityTile(null)}
+              </div>
             </Section>
 
             <Section label={t("sheet.format")}>
-              <select className="select select-sm w-full" value={preset} onChange={(e) => setPreset(e.target.value as Preset)}>
-                {PRESETS.map((p) => (
-                  <option key={p} value={p}>{t(`preset.${p}`)}</option>
-                ))}
-              </select>
+              <div role="radiogroup" aria-label={t("sheet.format")}>
+                {(allPresets ? PRESETS : visiblePresets(defaults.preset)).map(presetChip)}
+                {!allPresets && (
+                  <button type="button" className={chipCls(false)} onClick={() => setAllPresets(true)}>{t("sheet.more")} ▾</button>
+                )}
+              </div>
             </Section>
 
             <Section label={t("sheet.subtitles")}>
@@ -148,26 +169,25 @@ export function OptionsSheet({ url, info, onClose }: Props) {
               <div>{info.subtitles.map(subChip)}</div>
               {autoOnly.length > 0 && (
                 <details className="mt-1">
-                  <summary className="cursor-pointer text-xs text-fg-muted">{t("sheet.autoSubs")} ({autoOnly.length})</summary>
-                  <div className="mt-1 max-h-32 overflow-y-auto">{autoOnly.map(subChip)}</div>
+                  <summary className="cursor-pointer text-[11px] text-fg-muted">{t("sheet.autoSubs")} ({autoOnly.length})</summary>
+                  <div className="mt-1.5 max-h-32 overflow-y-auto">{autoOnly.map(subChip)}</div>
                 </details>
               )}
             </Section>
 
-            <label className="mt-3 flex items-center gap-2 text-sm">
-              <input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-              {t("sheet.remember")}
-            </label>
-
             {error && <div role="alert" className="alert alert-error mt-3 py-2 text-sm">{error}</div>}
 
-            <div className="mt-4 flex justify-end gap-2">
-              <button className="btn btn-outline btn-sm" onClick={onClose}>{t("sheet.cancel")}</button>
+            <div className="mt-4 flex items-center gap-2">
+              <label className="flex flex-1 items-center gap-2 text-[11.5px] text-base-content/80">
+                <input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                {t("sheet.remember")}
+              </label>
+              <button className="btn btn-sm" onClick={onClose}>{t("sheet.cancel")}</button>
               <button ref={downloadRef} autoFocus className="btn btn-primary btn-sm" onClick={confirm} disabled={busy}>{t("sheet.download")}</button>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </dialog>
   );
 }

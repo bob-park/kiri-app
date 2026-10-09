@@ -39,6 +39,7 @@
     "m4a": "M4A (AAC)"
   },
   "sheet": {
+    "more": "もっと見る",
     "loading": "動画情報を読み込み中…",
     "quality": "画質",
     "format": "出力フォーマット",

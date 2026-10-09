@@ -39,6 +39,7 @@
     "m4a": "M4A (AAC)"
   },
   "sheet": {
+    "more": "More",
     "loading": "Reading video info…",
     "quality": "Quality",
     "format": "Output format",

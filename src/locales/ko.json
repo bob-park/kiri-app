@@ -39,6 +39,7 @@
     "m4a": "M4A (AAC)"
   },
   "sheet": {
+    "more": "더보기",
     "loading": "영상 정보를 읽는 중…",
     "quality": "화질",
     "format": "출력 포맷",
