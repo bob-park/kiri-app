@@ -99,6 +99,9 @@ export interface CliStatus {
 export interface UpdateInfo {
   version: string;
   notes: string;
+  /** 백그라운드 받기를 마쳐 바로 설치할 수 있다 */
+  ready: boolean;
+  downloading: boolean;
 }
 
 export interface UpdateProgress {

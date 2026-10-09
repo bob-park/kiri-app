@@ -4,7 +4,8 @@ import { isIdle, useQueue } from "../lib/queue";
 
 export function UpdateBanner() {
   const { t } = useTranslation();
-  const { info, progress, scheduled, install } = useUpdate();
+  const { info, progress, phase, install } = useUpdate();
+  const scheduled = phase === "scheduled";
   const busy = useQueue((s) => !isIdle(s.jobs));
   if (!info) return null;
   const pct = progress?.total ? Math.round((progress.received / progress.total) * 100) : 0;
