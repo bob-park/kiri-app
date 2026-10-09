@@ -18,22 +18,22 @@ export default function SettingsWindow() {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("general");
   const Body = TABS.find((x) => x.key === tab)!.Body;
   return (
-    <div className="flex h-full flex-col">
-      <nav role="tablist" className="flex justify-center gap-1 border-b border-base-300 bg-base-200 p-2">
+    <div className="flex h-full flex-col bg-base-200">
+      <nav role="tablist" className="flex justify-center gap-1 px-2 pt-2 pb-2.5">
         {TABS.map((x) => (
           <button
             key={x.key}
             role="tab"
             aria-selected={tab === x.key}
-            className={`flex w-20 flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-xs ${tab === x.key ? "bg-secondary font-semibold text-secondary-content" : "text-fg-muted"}`}
+            className={`flex w-[72px] flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-[11px] transition-colors ${tab === x.key ? "bg-secondary font-semibold text-secondary-content" : "text-fg-muted hover:bg-base-300/60"}`}
             onClick={() => setTab(x.key)}
           >
-            <Icon name={x.icon} className="h-5 w-5" />
+            <Icon name={x.icon} className="h-[18px] w-[18px]" />
             {t(`settings.tab.${x.key}`)}
           </button>
         ))}
       </nav>
-      <div className="flex-1 overflow-y-auto px-5 py-3">
+      <div className="flex-1 overflow-y-auto px-5 pt-1 pb-4">
         <Body />
       </div>
     </div>

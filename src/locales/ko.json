@@ -67,6 +67,7 @@
   "status": { "running": "진행 중 {{n}}", "queued": "대기 {{n}}", "completed": "완료 {{n}}", "failed": "실패 {{n}}" },
   "settings": {
     "tab": { "general": "일반", "download": "다운로드", "cli": "CLI", "update": "업데이트" },
+    "group": { "display": "화면", "window": "창", "save": "저장", "defaults": "기본 옵션", "performance": "성능" },
     "general": {
       "language": "언어",
       "langSystem": "시스템 설정",

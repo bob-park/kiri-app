@@ -67,6 +67,7 @@
   "status": { "running": "進行中 {{n}}", "queued": "待機 {{n}}", "completed": "完了 {{n}}", "failed": "失敗 {{n}}" },
   "settings": {
     "tab": { "general": "一般", "download": "ダウンロード", "cli": "CLI", "update": "アップデート" },
+    "group": { "display": "表示", "window": "ウインドウ", "save": "保存", "defaults": "デフォルト", "performance": "パフォーマンス" },
     "general": {
       "language": "言語",
       "langSystem": "システム",

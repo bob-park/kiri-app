@@ -67,6 +67,7 @@
   "status": { "running": "{{n}} running", "queued": "{{n}} queued", "completed": "{{n}} done", "failed": "{{n}} failed" },
   "settings": {
     "tab": { "general": "General", "download": "Downloads", "cli": "CLI", "update": "Updates" },
+    "group": { "display": "Appearance", "window": "Window", "save": "Saving", "defaults": "Defaults", "performance": "Performance" },
     "general": {
       "language": "Language",
       "langSystem": "System",
