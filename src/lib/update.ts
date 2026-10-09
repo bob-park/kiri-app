@@ -36,6 +36,7 @@ export function nextPhase(p: UpdatePhase, e: UpdateEvent): UpdatePhase {
     case "install":
       return "installing";
     case "installFailed":
+      if (p === "idle") return p; // 확인 실패 등 받을 업데이트가 없을 때
       return e.ready ? "ready" : "failed";
   }
 }

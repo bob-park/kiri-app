@@ -31,6 +31,7 @@ describe("nextPhase", () => {
   it("a failed install returns to ready only when the file is already downloaded", () => {
     expect(nextPhase("installing", { type: "installFailed", ready: true })).toBe("ready");
     expect(nextPhase("installing", { type: "installFailed", ready: false })).toBe("failed");
+    expect(nextPhase("idle", { type: "installFailed", ready: false })).toBe("idle");
   });
 });
 
