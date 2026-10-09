@@ -5,7 +5,7 @@ use kiri_core::{engine::Engine, model::Job};
 use serde::Serialize;
 use std::{
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
@@ -13,20 +13,34 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+/// 찾은 업데이트와, 받아 두었으면 그 파일. 메모리에만 둔다(앱을 끄면 다음에 다시 받는다).
+struct Pending {
+    update: Update,
+    bytes: Option<Arc<Vec<u8>>>,
+}
+
 #[derive(Default)]
-pub struct UpdateState(Mutex<Option<Update>>);
+pub struct UpdateState(Mutex<Option<Pending>>);
+
+/// 백그라운드 받기가 도는 중.
+static DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct UpdateInfo {
     pub version: String,
     pub notes: String,
+    /// 받기를 마쳐 바로 설치할 수 있다.
+    pub ready: bool,
+    pub downloading: bool,
 }
 
 impl UpdateInfo {
-    fn from_update(u: &Update) -> Self {
+    fn from_pending(p: &Pending) -> Self {
         Self {
-            version: u.version.clone(),
-            notes: u.body.clone().unwrap_or_default(),
+            version: p.update.version.clone(),
+            notes: p.update.body.clone().unwrap_or_default(),
+            ready: p.bytes.is_some(),
+            downloading: DOWNLOADING.load(Ordering::SeqCst),
         }
     }
 }
@@ -53,7 +67,7 @@ pub fn status(app: &AppHandle) -> Option<UpdateInfo> {
         .lock()
         .unwrap()
         .as_ref()
-        .map(UpdateInfo::from_update)
+        .map(UpdateInfo::from_pending)
 }
 
 pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
@@ -63,13 +77,88 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
         .check()
         .await
         .map_err(|e| e.to_string())?;
-    let info = found.as_ref().map(UpdateInfo::from_update);
-    *app.state::<UpdateState>().0.lock().unwrap() = found;
+    {
+        let state = app.state::<UpdateState>();
+        let mut slot = state.0.lock().unwrap();
+        let old = slot.take();
+        *slot = found.map(|update| {
+            // 같은 버전을 다시 찾았으면 이미 받은 파일을 버리지 않는다.
+            let bytes = old
+                .filter(|o| o.update.version == update.version)
+                .and_then(|o| o.bytes);
+            Pending { update, bytes }
+        });
+    }
+    start_download(app); // DOWNLOADING 을 먼저 켜서 아래 info 가 downloading=true 를 싣는다
+    let info = status(app);
     if let Some(i) = &info {
         let _ = app.emit("update-available", i);
     }
     crate::tray::relabel_update(app);
     Ok(info)
+}
+
+/// 진행률을 update-progress 로 알리며 받는다. 백그라운드 받기와 설치가 같이 쓴다.
+async fn download(app: &AppHandle, update: &Update) -> Result<Vec<u8>, String> {
+    let mut received: u64 = 0;
+    let mut last_pct = u64::MAX;
+    update
+        .download(
+            |chunk, total| {
+                received += chunk as u64;
+                let pct = total.map_or(0, |t| received * 100 / t.max(1));
+                if pct != last_pct {
+                    last_pct = pct;
+                    let _ = app.emit("update-progress", UpdateProgress { received, total });
+                }
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 보관한 업데이트를 아직 받지 않았으면 백그라운드에서 받는다. 이미 받는 중이면 아무것도 하지 않는다.
+pub fn start_download(app: &AppHandle) {
+    let update = {
+        let state = app.state::<UpdateState>();
+        let slot = state.0.lock().unwrap();
+        match slot.as_ref() {
+            Some(p) if p.bytes.is_none() => p.update.clone(),
+            _ => return,
+        }
+    };
+    if DOWNLOADING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = download(&app, &update).await;
+        DOWNLOADING.store(false, Ordering::SeqCst);
+        match result {
+            Ok(bytes) => {
+                let info = {
+                    let state = app.state::<UpdateState>();
+                    let mut slot = state.0.lock().unwrap();
+                    match slot.as_mut() {
+                        // 받는 사이 다른 버전으로 바뀌었으면 버린다.
+                        Some(p) if p.update.version == update.version => {
+                            p.bytes = Some(Arc::new(bytes));
+                            Some(UpdateInfo::from_pending(p))
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(i) = info {
+                    let _ = app.emit("update-ready", i);
+                }
+            }
+            Err(e) => {
+                eprintln!("kiri update: background download failed: {e}");
+                let _ = app.emit("update-download-failed", e);
+            }
+        }
+    });
 }
 
 /// 받고 → 설치 → 재시작. 실패해도 보관한 Update 는 남겨 다시 시도할 수 있다.
@@ -84,30 +173,20 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         INSTALLING.store(false, Ordering::SeqCst);
         e
     };
-    let update = app
+    let (update, ready) = app
         .state::<UpdateState>()
         .0
         .lock()
         .unwrap()
-        .clone()
+        .as_ref()
+        .map(|p| (p.update.clone(), p.bytes.clone()))
         .ok_or_else(|| fail("error.no_update".to_string()))?;
-    let mut received: u64 = 0;
-    let mut last_pct = u64::MAX;
-    let bytes = update
-        .download(
-            |chunk, total| {
-                received += chunk as u64;
-                let pct = total.map_or(0, |t| received * 100 / t.max(1));
-                if pct != last_pct {
-                    last_pct = pct;
-                    let _ = app.emit("update-progress", UpdateProgress { received, total });
-                }
-            },
-            || {},
-        )
-        .await
-        .map_err(|e| fail(e.to_string()))?;
-    update.install(bytes).map_err(|e| fail(e.to_string()))?;
+    // 받아 두었으면 그대로, 아니면 지금 받는다. 백그라운드 받기와 드물게 겹치면 한 번 더 받는다(결과는 같음).
+    let bytes = match ready {
+        Some(b) => b,
+        None => Arc::new(download(app, &update).await.map_err(fail)?),
+    };
+    update.install(bytes.as_slice()).map_err(|e| fail(e.to_string()))?;
     // restart 는 RunEvent::Exit 를 거치지 않을 수 있으므로 여기서 작업을 대기로 되돌리고
     // yt-dlp·ffmpeg 를 정리한다(최대 2초 블로킹이라 블로킹 스레드에서).
     let engine = app.state::<Engine>().inner().clone();
@@ -222,9 +301,14 @@ mod tests {
         let v = serde_json::to_value(UpdateInfo {
             version: "0.2.0".into(),
             notes: "fix".into(),
+            ready: true,
+            downloading: false,
         })
         .unwrap();
-        assert_eq!(v, serde_json::json!({"version": "0.2.0", "notes": "fix"}));
+        assert_eq!(
+            v,
+            serde_json::json!({"version": "0.2.0", "notes": "fix", "ready": true, "downloading": false})
+        );
         let p = serde_json::to_value(UpdateProgress {
             received: 5,
             total: None,

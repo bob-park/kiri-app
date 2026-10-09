@@ -285,6 +285,8 @@ mod tests {
         let info = crate::updater::UpdateInfo {
             version: "0.2.0".into(),
             notes: String::new(),
+            ready: false,
+            downloading: false,
         };
         assert_eq!(update_label(&l, Some(info)), "v0.2.0 설치");
     }

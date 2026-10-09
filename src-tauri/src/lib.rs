@@ -96,6 +96,7 @@ pub fn run() {
             commands::update_status,
             commands::check_update,
             commands::install_update,
+            commands::retry_update_download,
             commands::open_settings,
             commands::cli_status,
             commands::install_cli,
