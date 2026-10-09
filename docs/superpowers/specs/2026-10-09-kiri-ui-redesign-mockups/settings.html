@@ -1,0 +1,113 @@
+<style>
+  .cards { grid-template-columns: 1fr !important; max-width: 640px; margin: 0 auto; gap: 2rem !important; }
+  .card-image { aspect-ratio: auto !important; display: block !important; }
+  .k { font-family: "Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, sans-serif; color:#101114; background:#f6f6f9; border-radius:12px; overflow:hidden; font-size:13px; box-shadow: rgba(0,0,0,0.08) 0 8px 32px; border:1px solid #dedee5; width:560px; height:460px; margin:0 auto; display:flex; flex-direction:column; }
+  .k * { box-sizing:border-box; }
+  .k .tb { height:38px; display:flex; align-items:center; gap:7px; padding:0 12px; flex-shrink:0; }
+  .k .dot { width:11px; height:11px; border-radius:50%; background:#dedee5; }
+  .k .wt { flex:1; text-align:center; font-weight:600; font-size:12.5px; margin-right:50px; }
+  .k .grow { flex:1; min-width:0; }
+  .k .muted { color:#9497a9; font-size:11px; }
+  .k .group { background:#fff; border-radius:14px; box-shadow: rgba(16,24,40,0.04) 0 1px 4px; border:1px solid #ececf2; margin-bottom:12px; }
+  .k .gt { font-size:10.5px; font-weight:700; color:#686b82; margin:0 4px 6px; }
+  .k .r { display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid #f2f2f6; }
+  .k .r:last-child { border-bottom:none; }
+  .k .r .l { font-size:12.5px; font-weight:500; }
+  .k .sel { border:1px solid #dedee5; border-radius:10px; padding:5px 10px; font-size:11.5px; min-width:110px; display:flex; justify-content:space-between; background:#fff; }
+  .k .tog { width:34px; height:20px; border-radius:9999px; background:#7132f5; position:relative; flex-shrink:0; }
+  .k .tog::after { content:""; position:absolute; right:2px; top:2px; width:16px; height:16px; border-radius:50%; background:#fff; }
+  .k .tog.off { background:#dedee5; }
+  .k .tog.off::after { right:auto; left:2px; }
+  .k .seg { display:inline-flex; background:rgba(148,151,169,0.12); border-radius:10px; padding:2px; }
+  .k .seg span { padding:4px 10px; border-radius:8px; font-size:11px; color:#686b82; }
+  .k .seg span.on { background:#fff; color:#101114; font-weight:600; box-shadow: rgba(16,24,40,0.08) 0 1px 3px; }
+  .k .btn-sub { background:rgba(133,91,251,0.16); color:#7132f5; border-radius:10px; padding:5px 10px; font-weight:600; font-size:11px; white-space:nowrap; }
+  .k .tab { display:flex; flex-direction:column; align-items:center; gap:3px; width:72px; padding:6px 0; border-radius:12px; font-size:11px; color:#686b82; }
+  .k .tab i { font-style:normal; font-size:16px; }
+  .k .tab.on { background:rgba(133,91,251,0.16); color:#5b1ecf; font-weight:600; }
+  .k .side { width:150px; padding:4px 10px; flex-shrink:0; }
+  .k .nav { display:flex; gap:8px; align-items:center; padding:7px 10px; border-radius:10px; font-size:12px; color:#484b5e; margin-bottom:2px; }
+  .k .nav.on { background:#7132f5; color:#fff; font-weight:600; }
+</style>
+
+<h2>설정 창: 어떤 구성이 좋을까요?</h2>
+<p class="subtitle">실제 크기(560×460)입니다. 셋 다 설정 항목을 흰 카드 그룹으로 묶는 건 같고, 탭 이동 방식만 다릅니다. 예시는 '다운로드' 탭.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="top-tabs" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:20px; background:#ececf1;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wt">설정</span></div>
+        <div style="display:flex;justify-content:center;gap:4px;padding:0 0 10px">
+          <div class="tab"><i>⚙</i>일반</div><div class="tab on"><i>↓</i>다운로드</div><div class="tab"><i>⌘</i>CLI</div><div class="tab"><i>↻</i>업데이트</div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:4px 20px">
+          <div class="gt">저장</div>
+          <div class="group">
+            <div class="r"><div class="grow"><div class="l">저장 위치</div><div class="muted">~/Downloads/kiri</div></div><span class="btn-sub">변경…</span></div>
+          </div>
+          <div class="gt">기본 옵션</div>
+          <div class="group">
+            <div class="r"><div class="grow l">기본 화질</div><div class="sel"><span>최고 화질</span>▾</div></div>
+            <div class="r"><div class="grow l">기본 포맷</div><div class="sel"><span>원본 유지</span>▾</div></div>
+            <div class="r"><div class="grow l">옵션을 묻지 않고 바로 시작</div><div class="tog off"></div></div>
+          </div>
+          <div class="gt">성능</div>
+          <div class="group">
+            <div class="r"><div class="grow l">동시 다운로드</div><div class="seg"><span>1</span><span class="on">2</span><span>3</span><span>4</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>1. 상단 아이콘 탭 (macOS 환경설정 스타일)</h3><p>지금 구조 그대로, 항목을 회색 배경 위 흰 카드 그룹으로 묶음. Mac 앱다운 정석. 변경 최소.</p></div>
+  </div>
+
+  <div class="card" data-choice="sidebar" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:20px; background:#ececf1;">
+      <div class="k" style="flex-direction:row">
+        <div class="side">
+          <div class="tb" style="padding:0 2px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div style="height:10px"></div>
+          <div class="nav">⚙ 일반</div><div class="nav on">↓ 다운로드</div><div class="nav">⌘ CLI</div><div class="nav">↻ 업데이트</div>
+        </div>
+        <div class="grow" style="padding:14px 18px 0 6px;overflow:hidden">
+          <div style="font-size:18px;font-weight:700;letter-spacing:-0.4px;margin:4px 4px 14px">다운로드</div>
+          <div class="group">
+            <div class="r"><div class="grow"><div class="l">저장 위치</div><div class="muted">~/Downloads/kiri</div></div><span class="btn-sub">변경…</span></div>
+          </div>
+          <div class="group">
+            <div class="r"><div class="grow l">기본 화질</div><div class="sel"><span>최고 화질</span>▾</div></div>
+            <div class="r"><div class="grow l">기본 포맷</div><div class="sel"><span>원본 유지</span>▾</div></div>
+            <div class="r"><div class="grow l">바로 시작</div><div class="tog off"></div></div>
+            <div class="r"><div class="grow l">동시 다운로드</div><div class="seg"><span>1</span><span class="on">2</span><span>3</span><span>4</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>2. 왼쪽 사이드바 (시스템 설정 스타일)</h3><p>최신 macOS 시스템 설정처럼 왼쪽 목록 + 큰 섹션 제목. 모던하지만 560px 폭에서 컨트롤 영역이 좁아짐(창 폭 확대 필요할 수 있음).</p></div>
+  </div>
+
+  <div class="card" data-choice="segmented" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:20px; background:#ececf1;">
+      <div class="k">
+        <div class="tb"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wt">설정</span></div>
+        <div style="display:flex;justify-content:center;padding:2px 0 14px">
+          <div class="seg" style="padding:3px"><span style="padding:5px 16px">일반</span><span class="on" style="padding:5px 16px">다운로드</span><span style="padding:5px 16px">CLI</span><span style="padding:5px 16px">업데이트</span></div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:0 20px">
+          <div class="group">
+            <div class="r"><div class="grow"><div class="l">저장 위치</div><div class="muted">~/Downloads/kiri</div></div><span class="btn-sub">변경…</span></div>
+            <div class="r"><div class="grow l">기본 화질</div><div class="sel"><span>최고 화질</span>▾</div></div>
+            <div class="r"><div class="grow l">기본 포맷</div><div class="sel"><span>원본 유지</span>▾</div></div>
+            <div class="r"><div class="grow l">옵션을 묻지 않고 바로 시작</div><div class="tog off"></div></div>
+            <div class="r"><div class="grow l">동시 다운로드</div><div class="seg"><span>1</span><span class="on">2</span><span>3</span><span>4</span></div></div>
+            <div class="r"><div class="grow"><div class="l">하드웨어 가속 사용</div><div class="muted">가능하면 VideoToolbox로 인코딩합니다</div></div><div class="tog"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>3. 세그먼트 컨트롤 탭</h3><p>아이콘 없이 텍스트 세그먼트로 탭 전환, 항목은 한 카드에. 가장 간결하고 콤팩트, 한 화면에 더 많이 보임.</p></div>
+  </div>
+
+</div>
