@@ -9,6 +9,7 @@
     "toolsFailed": "Couldn't get ready to download: {{error}}",
     "retry": "Retry"
   },
+  "toast": { "close": "Close" },
   "job": {
     "stop": "Stop",
     "remove": "Remove",

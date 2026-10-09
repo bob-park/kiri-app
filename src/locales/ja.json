@@ -9,6 +9,7 @@
     "toolsFailed": "ダウンロードの準備に失敗しました: {{error}}",
     "retry": "再試行"
   },
+  "toast": { "close": "閉じる" },
   "job": {
     "stop": "停止",
     "remove": "削除",

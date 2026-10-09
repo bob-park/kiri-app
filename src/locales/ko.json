@@ -9,6 +9,7 @@
     "toolsFailed": "다운로드 준비에 실패했습니다: {{error}}",
     "retry": "재시도"
   },
+  "toast": { "close": "닫기" },
   "job": {
     "stop": "중지",
     "remove": "삭제",

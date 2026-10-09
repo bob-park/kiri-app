@@ -35,7 +35,7 @@ function Root() {
     <React.Suspense fallback={null}>
       {label === "main" && <MainWindow />}
       {label === "settings" && <SettingsWindow />}
-      <Toasts />
+      <Toasts bottom={label === "main" ? 44 : 16} />
     </React.Suspense>
   );
 }
