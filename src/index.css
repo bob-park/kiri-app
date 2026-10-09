@@ -13,7 +13,7 @@
   --color-success: #4cd393; --color-success-content: #101114;
   --color-warning: #fbbf24; --color-warning-content: #101114;
   --color-error: #f3727f; --color-error-content: #101114;
-  --radius-box: 12px; --radius-field: 12px; --radius-selector: 6px;
+  --radius-box: 14px; --radius-field: 12px; --radius-selector: 6px;
   --size-field: 0.25rem; --size-selector: 0.25rem; --border: 1px; --depth: 0; --noise: 0;
 }
 @plugin "daisyui/theme" {
@@ -27,15 +27,31 @@
   --color-success: #149e61; --color-success-content: #ffffff;
   --color-warning: #f59e0b; --color-warning-content: #101114;
   --color-error: #d33a4a; --color-error-content: #ffffff;
-  --radius-box: 12px; --radius-field: 12px; --radius-selector: 6px;
+  --radius-box: 14px; --radius-field: 12px; --radius-selector: 6px;
   --size-field: 0.25rem; --size-selector: 0.25rem; --border: 1px; --depth: 0; --noise: 0;
 }
 
 @theme {
   --color-fg-muted: #8b8ea3;
+  --color-toast: #2c2e38;
+  --color-toast-content: #ffffff;
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, "Helvetica Neue", Arial, "Hiragino Sans", sans-serif;
 }
-[data-theme="kiri-light"] { --color-fg-muted: #9497a9; }
+[data-theme="kiri-light"] { --color-fg-muted: #9497a9; --color-toast: #101114; }
 
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--color-base-100); color: var(--color-base-content); font-family: var(--font-sans); font-size: 14px; -webkit-user-select: none; user-select: none; }
+
+@layer components {
+  .surface-card { @apply rounded-box border border-base-300/70 bg-base-100 shadow-[0_1px_4px_rgba(16,24,40,0.04)]; }
+  .float-shadow { box-shadow: 0 12px 32px rgba(16, 17, 20, 0.18); }
+  .chip { @apply inline-flex items-center whitespace-nowrap rounded-[6px] px-[7px] py-[2px] text-[10px] font-semibold; }
+  .chip-run { @apply bg-secondary text-secondary-content; }
+  .chip-ok { @apply bg-success/15 text-success; }
+  .chip-err { @apply bg-error/15 text-error; }
+  .chip-idle { @apply bg-base-content/10 text-base-content/70; }
+}
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+.animate-toast-in { animation: toast-in 150ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .animate-toast-in { animation: none; } }
