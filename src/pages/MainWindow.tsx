@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { api } from "../lib/tauri";
 import { useQueue } from "../lib/queue";
-import { useTools } from "../lib/tools";
+import { toolsToast, useTools } from "../lib/tools";
 import { useSettings } from "../lib/settings";
-import { showError } from "../lib/toast";
+import { showError, useToasts } from "../lib/toast";
 import { extractUrl, isEditableTarget } from "../lib/paste";
 import { JobRow } from "../components/JobRow";
 import { Icon } from "../components/Icon";
@@ -18,33 +18,28 @@ interface SheetState {
   info: VideoInfo | null;
 }
 
-function ToolsNotice() {
+/** 첫 실행 등 도구가 준비되지 않았을 때 상단 배너 대신 지속 토스트를 띄운다. */
+function useToolsToast() {
   const { t } = useTranslation();
   const status = useTools((s) => s.status);
-  if (status?.ready) return null;
-  const failed = status?.error && !status.installing;
-  if (failed) {
-    return (
-      <div role="status" className="mx-3 mt-2 flex items-center gap-2 rounded-xl bg-error/15 px-3 py-2 text-sm text-error">
-        <span className="flex-1">{t("app.toolsFailed", { error: status!.error })}</span>
-        <button className="btn btn-xs" onClick={() => api.updateTools().catch(showError)}>{t("app.retry")}</button>
-      </div>
-    );
-  }
-  return (
-    <div role="status" aria-live="polite" className="mx-3 mt-2 rounded-xl bg-secondary px-3 py-2.5 text-secondary-content">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <span className="loading loading-spinner loading-sm" />
-        {t("app.toolsPreparing")}
-      </div>
-      <p className="mt-1 text-xs">{t("app.toolsPreparingDesc")}</p>
-      <progress className="progress progress-primary mt-2 h-1.5 w-full" aria-label={t("app.toolsPreparing")} />
-    </div>
-  );
+  const kind = toolsToast(status);
+  const error = status?.error;
+  useEffect(() => {
+    const { push, dismissKey } = useToasts.getState();
+    if (kind === "hidden") dismissKey("tools");
+    else if (kind === "failed")
+      push({
+        key: "tools", kind: "error", sticky: true,
+        text: t("app.toolsFailed", { error }),
+        action: { label: t("app.retry"), run: () => void api.updateTools().catch(showError) },
+      });
+    else push({ key: "tools", kind: "progress", sticky: true, progress: null, text: t("app.toolsPreparing"), desc: t("app.toolsPreparingDesc") });
+  }, [kind, error, t]);
 }
 
 export default function MainWindow() {
   const { t } = useTranslation();
+  useToolsToast();
   const jobs = useQueue((s) => s.jobs);
   const [sheet, setSheet] = useState<SheetState | null>(null);
   // 시트가 열려 있으면 ⌘V·드롭을 무시한다(열린 시트를 덮어쓰지 않게). keydown effect가 낡지 않도록 ref로 읽는다.
@@ -116,7 +111,6 @@ export default function MainWindow() {
         <button className="btn btn-ghost btn-sm btn-square" aria-label={t("app.settings")} title={t("app.settings")} onClick={() => api.openSettings().catch(showError)}><Icon name="settings" /></button>
       </header>
       <UpdateBanner />
-      <ToolsNotice />
       <main className="flex-1 overflow-y-auto">
         {jobs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-fg-muted">{t("app.empty")}</div>
