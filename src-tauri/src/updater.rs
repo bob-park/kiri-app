@@ -135,28 +135,28 @@ pub fn start_download(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let result = download(&app, &update).await;
         DOWNLOADING.store(false, Ordering::SeqCst);
-        match result {
-            Ok(bytes) => {
-                let info = {
-                    let state = app.state::<UpdateState>();
-                    let mut slot = state.0.lock().unwrap();
-                    match slot.as_mut() {
-                        // 받는 사이 다른 버전으로 바뀌었으면 버린다.
-                        Some(p) if p.update.version == update.version => {
-                            p.bytes = Some(Arc::new(bytes));
-                            Some(UpdateInfo::from_pending(p))
-                        }
-                        _ => None,
-                    }
-                };
-                if let Some(i) = info {
-                    let _ = app.emit("update-ready", i);
-                }
+        // 받은 버전이 아직 보관 중인 버전일 때만 결과를 쓴다.
+        let outcome = {
+            let state = app.state::<UpdateState>();
+            let mut slot = state.0.lock().unwrap();
+            match slot.as_mut() {
+                Some(p) if p.update.version == update.version => Some(result.map(|bytes| {
+                    p.bytes = Some(Arc::new(bytes));
+                    UpdateInfo::from_pending(p)
+                })),
+                _ => None,
             }
-            Err(e) => {
+        };
+        match outcome {
+            Some(Ok(i)) => {
+                let _ = app.emit("update-ready", i);
+            }
+            Some(Err(e)) => {
                 eprintln!("kiri update: background download failed: {e}");
                 let _ = app.emit("update-download-failed", e);
             }
+            // 받는 사이 다른 버전으로 바뀌었으면 이 결과는 버리고 새 버전을 이어서 받는다.
+            None => start_download(&app),
         }
     });
 }
