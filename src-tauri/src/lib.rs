@@ -7,6 +7,8 @@ mod ipc_server;
 mod pubkey_check;
 mod quit;
 mod settings;
+#[allow(dead_code)] // ponytail: unused until Task 3 wires settings/queue onto it; remove then
+mod shared;
 mod tray;
 mod updater;
 mod windows;
