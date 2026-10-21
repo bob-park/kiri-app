@@ -1,4 +1,4 @@
-//! 테스트 전용 도우미. 실제 yt-dlp/ffmpeg 대신 sh 스크립트를 실행 파일로 쓴다.
+//! Test-only helpers. sh scripts stand in for the real yt-dlp/ffmpeg executables.
 use crate::model::{Job, JobOptions, JobSource, JobState, Preset, Tools};
 use std::{
     fs,
@@ -13,7 +13,7 @@ pub fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// `-o <dir>/%(title)s.%(ext)s` 를 읽어 그 폴더에 결과물과 자막을 만든다.
+/// Reads `-o <dir>/%(title)s.%(ext)s` and creates the output and subtitles in that folder.
 pub const FAKE_YTDLP_DOWNLOAD: &str = r#"out=""
 while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift;; esac; shift; done
 dir=$(dirname "$out")
@@ -23,14 +23,14 @@ echo "KIRI|  50.0%|1048576|00:01"
 : > "$dir/Fake Video.ko.srt"
 echo "KIRI|100.0%|1048576|00:00""#;
 
-/// 마지막 인자(출력 경로)에 파일을 만든다.
+/// Creates a file at the last argument (the output path).
 pub const FAKE_FFMPEG: &str = r#"for a; do last="$a"; done
 mkdir -p "$(dirname "$last")"
 echo "out_time_us=1000000"
 echo "progress=end"
 : > "$last""#;
 
-/// VideoToolbox 인코더를 쓰면 실패한다.
+/// Fails when a VideoToolbox encoder is used.
 pub const FAKE_FFMPEG_VT_FAILS: &str = r#"case "$*" in *videotoolbox*) echo "Error: cannot open videotoolbox encoder" >&2; exit 1;; esac
 for a; do last="$a"; done
 mkdir -p "$(dirname "$last")"
@@ -68,13 +68,14 @@ pub fn job(preset: Preset) -> Job {
         eta: None,
         output: None,
         work_dir: None,
+        original: None,
         created_at: 0,
     }
 }
 
 pub const PROBE_FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/probe.json");
 
-/// `-J` 이면 fixture 를 출력하고, 아니면 download_body 를 실행한다.
+/// With `-J` prints the fixture, otherwise runs download_body.
 pub fn ytdlp_with_probe(download_body: &str) -> String {
     format!("case \" $* \" in *\" -J \"*) cat '{PROBE_FIXTURE}'; exit 0;; esac\n{download_body}")
 }

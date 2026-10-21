@@ -13,8 +13,8 @@ related:
 
 - `strict`, `noUnusedLocals` and `noUnusedParameters` are on. Assume non-null and exhaustive checks.
   - A `switch` over a union returns in every case; TS then rejects a missing case.
-  - See `utils/updateStatus.ts`.
-- **`interface`** is for object shapes that may be extended, such as `AppError` and `QueryMutationHandle<T>`.
+  - See `nextPhase` in `utils/update.ts`.
+- **`interface`** is for object shapes that may be extended, such as `AppError` and `UpdateView`.
 - **`type`** is for unions, mapped types and DTO aliases, such as `ThemePref` and `UpdateStatus`.
 - **Props:**
   - Inline: `Readonly<{ children: React.ReactNode }>`.

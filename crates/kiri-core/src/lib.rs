@@ -1,4 +1,4 @@
-//! kiri 의 Tauri 비의존 코어. 앱과 CLI 가 함께 쓴다.
+//! kiri's Tauri-free core, shared by the app and the CLI.
 pub mod engine;
 pub mod ffmpeg;
 pub mod files;

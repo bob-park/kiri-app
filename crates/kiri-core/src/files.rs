@@ -1,10 +1,10 @@
-//! 다운로드 결과 파일 다루기.
+//! Handling of output files and job packages.
 use std::{
     fs, io,
     path::{Path, PathBuf},
 };
 
-/// dir 안에서 겹치지 않는 경로. "a.mp4" → "a (1).mp4" → "a (2).mp4" …
+/// A non-clashing path in dir. "a.mp4" → "a (1).mp4" → "a (2).mp4" …
 pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
     let first = dir.join(name);
     if !first.exists() {
@@ -22,7 +22,7 @@ pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
         .expect("unbounded range")
 }
 
-/// dir 안에서 `{stem}-{n}.*` (n ≥ 1, 확장자 무관, 디렉터리 포함) 의 최댓값 + 1. 없으면 1.
+/// The highest n of `{stem}-{n}.*` in dir (n ≥ 1, any extension, directories included) + 1, or 1.
 pub fn next_variant_index(dir: &Path, stem: &str) -> u32 {
     let prefix = format!("{stem}-");
     let max = fs::read_dir(dir)
@@ -42,8 +42,8 @@ pub fn next_variant_index(dir: &Path, stem: &str) -> u32 {
     max.saturating_add(1)
 }
 
-/// `dir/{stem}-{index}.{ext}`. 계산한 경로가 이미 있으면(대소문자·유니코드 정규화를
-/// 무시하는 파일 시스템) 다음 번호로 넘어가 덮어쓰지 않는다.
+/// `dir/{stem}-{index}.{ext}`. If that path already exists (file systems that ignore case
+/// or Unicode normalization) it moves to the next number instead of overwriting.
 pub fn variant_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
     let mut i = next_variant_index(dir, stem);
     loop {
@@ -55,7 +55,7 @@ pub fn variant_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
     }
 }
 
-/// rename, 볼륨이 다르면 복사 후 삭제.
+/// rename, or copy + delete across volumes.
 pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     match fs::rename(from, to) {
         Err(e) if e.kind() == io::ErrorKind::CrossesDevices => {
@@ -66,11 +66,11 @@ pub fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-/// `.kiripart` 패키지 안의 표식. 이게 있어야 kiri 가 만든 패키지로 보고 지운다.
+/// Marker inside a `.kiripart` package. Only packages with it count as kiri's and get removed.
 pub const PART_MARKER: &str = ".kiri";
 pub const PART_EXT: &str = "kiripart";
 
-/// 파일 이름으로 쓸 수 있는 제목. `/`·`:` 는 `_`, 앞뒤 공백·앞쪽 점 제거, 최대 120자.
+/// A title usable as a file name: `/` and `:` become `_`, surrounding spaces and leading dots go, max 120 chars.
 pub fn safe_title(title: &str) -> String {
     let t: String = title
         .trim()
@@ -88,25 +88,25 @@ pub fn safe_title(title: &str) -> String {
     }
 }
 
-/// 패키지 폴더와 표식 파일을 만든다.
+/// Creates the package folder and its marker file.
 pub fn make_part_dir(dir: &Path) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     fs::write(dir.join(PART_MARKER), b"")
 }
 
-/// kiri 가 만든 패키지인가: 확장자 kiripart, 심볼릭 링크가 아닌 실제 폴더, 안에 표식 파일.
+/// Whether it is kiri's package: kiripart extension, a real folder (not a symlink), marker inside.
 pub fn is_part_dir(dir: &Path) -> bool {
     dir.extension().is_some_and(|x| x == PART_EXT)
         && fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir())
         && fs::symlink_metadata(dir.join(PART_MARKER)).is_ok_and(|m| m.is_file())
 }
 
-/// 패키지를 지운다. 사용자 폴더 안이므로 `is_part_dir` 인 것만 지운다. 지웠으면 true.
+/// Removes a package. It lives in the user's folder, so only `is_part_dir` ones go. True if removed.
 pub fn remove_part_dir(dir: &Path) -> bool {
     is_part_dir(dir) && fs::remove_dir_all(dir).is_ok()
 }
 
-/// 폴더를 만들고 실제로 파일을 써 본다.
+/// Creates the folder and actually writes a test file.
 pub fn check_writable(dir: &Path) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     let probe = dir.join(".kiri-write-test");
@@ -122,7 +122,7 @@ fn is_aux(p: &Path) -> bool {
     name.starts_with('.') || name.contains(".part-Frag") || AUX_EXT.contains(&ext)
 }
 
-/// 작업 폴더에서 결과 미디어(자막·임시 파일이 아닌 첫 파일).
+/// The output media in a job folder (the first file that is not a subtitle or temp file).
 pub fn find_media(dir: &Path) -> io::Result<Option<PathBuf>> {
     for e in fs::read_dir(dir)? {
         let p = e?.path();
@@ -252,7 +252,7 @@ mod tests {
         );
         fs::write(d.path().join("제목.webm"), "").unwrap();
         fs::write(d.path().join("제목-1.mp4"), "").unwrap();
-        fs::create_dir(d.path().join("제목-3.kiripart")).unwrap(); // 진행 중인 변환도 센다
+        fs::create_dir(d.path().join("제목-3.kiripart")).unwrap(); // in-progress conversions count too
         assert_eq!(next_variant_index(d.path(), "제목"), 4);
         assert_eq!(
             variant_path(d.path(), "제목", "mov"),
@@ -272,9 +272,9 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         fs::write(d.path().join("title-1.mp4"), "keep").unwrap();
         if !d.path().join("TITLE-1.mp4").exists() {
-            return; // 대소문자 구분 파일 시스템에서는 겹치지 않는다
+            return; // no clash on a case-sensitive file system
         }
-        // read_dir 은 "title-1" 만 보므로 "TITLE" 접두사로는 세지 못한다. 그래도 덮어쓰면 안 된다.
+        // read_dir sees only "title-1", so the "TITLE" prefix misses it. It must still not overwrite.
         let p = variant_path(d.path(), "TITLE", "mp4");
         assert!(!p.exists(), "{p:?}");
         assert_eq!(p, d.path().join("TITLE-2.mp4"));
@@ -293,7 +293,7 @@ mod tests {
             fs::write(d.path().join(n), "").unwrap();
         }
         assert_eq!(next_variant_index(d.path(), "제목"), 1);
-        fs::write(d.path().join("a-b-3.mp4"), "").unwrap(); // stem 에 '-' 가 있어도 된다
+        fs::write(d.path().join("a-b-3.mp4"), "").unwrap(); // a '-' in the stem is fine
         assert_eq!(next_variant_index(d.path(), "a-b"), 4);
         assert_eq!(next_variant_index(d.path(), "a"), 1);
     }

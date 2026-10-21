@@ -1,4 +1,4 @@
-#[path = "src/pubkey_check.rs"]
+#[path = "src/app/pubkey_check.rs"]
 mod pubkey_check;
 
 fn main() {

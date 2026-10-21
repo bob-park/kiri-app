@@ -1,4 +1,4 @@
-//! 작업 하나의 전 과정: 다운로드 → (필요하면) 인코딩 → 저장 위치로 이동.
+//! One job end to end: download → encode (if needed) → move to the destination.
 use crate::{
     ffmpeg, files,
     model::{Job, JobSource, Tools},
@@ -20,7 +20,7 @@ pub struct PipelineCfg {
     pub tools: Tools,
     pub hw_accel: bool,
     pub download_dir: PathBuf,
-    /// 작업 전용 폴더. 앱에서는 `<저장 폴더>/<제목>.kiripart` (표식 `.kiri` 를 함께 만든다)
+    /// The job's own folder. In the app: `<save folder>/<title>.kiripart` (created with the `.kiri` marker)
     pub work_dir: PathBuf,
     pub log_path: PathBuf,
 }
@@ -37,12 +37,14 @@ pub struct Report {
     pub progress: f32,
     pub speed: Option<String>,
     pub eta: Option<String>,
+    /// Set once, on the report emitted right after the download is saved to the save folder.
+    pub original: Option<PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum PipelineError {
     Cancelled,
-    /// 사용자에게 보일 메시지. "error." 으로 시작하면 i18n 키.
+    /// Message for the user. Starting with "error." means an i18n key.
     Failed(String),
 }
 
@@ -102,11 +104,55 @@ async fn download_and_save(
     cancel: &CancellationToken,
     report: &mut impl FnMut(Report),
 ) -> Result<PathBuf, PipelineError> {
+    // The original is saved to the save folder as soon as it is downloaded, so the user can play it
+    // while it converts. A restart converts from it again instead of downloading.
+    let original = match job.original.as_deref().filter(|p| p.exists()) {
+        Some(p) => p.to_path_buf(),
+        None => {
+            let original = download(job, url, cfg, cancel, report).await?;
+            report(Report {
+                stage: Stage::Downloading,
+                progress: 1.0,
+                speed: None,
+                eta: None,
+                original: Some(original.clone()),
+            });
+            original
+        }
+    };
+    // On restart drop the earlier partial output (ffmpeg cannot resume encoding).
+    let _ = fs::remove_dir_all(cfg.work_dir.join("out"));
+    let Some(encoded) = encode(job, cfg, cancel, &original, report).await? else {
+        return Ok(original);
+    };
+    // The encoded file keeps the original's final stem, so `-n` follows any " (n)" the original got.
+    let stem = original
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("video");
+    let ext = encoded
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4");
+    let dest = files::variant_path(&cfg.download_dir, stem, ext);
+    files::move_file(&encoded, &dest).map_err(io_fail)?;
+    Ok(dest)
+}
+
+/// Downloads into the work folder, then moves the media and subtitles to the save folder.
+async fn download(
+    job: &Job,
+    url: &str,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    report: &mut impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
     report(Report {
         stage: Stage::Downloading,
         progress: 0.0,
         speed: None,
         eta: None,
+        original: None,
     });
     let args = ytdlp::download_args(url, &job.options, &cfg.tools, &cfg.work_dir);
     let mut tracker = ytdlp::ProgressTracker::new(ytdlp::expected_streams(&job.options));
@@ -117,6 +163,7 @@ async fn download_and_save(
                 progress: p.fraction,
                 speed: p.speed,
                 eta: p.eta,
+                original: None,
             });
         }
     })
@@ -126,27 +173,10 @@ async fn download_and_save(
     let downloaded = files::find_media(&cfg.work_dir)
         .map_err(io_fail)?
         .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
-    match encode(job, cfg, cancel, &downloaded, report).await? {
-        None => finalize(cfg, &downloaded),
-        Some(encoded) => {
-            // 원본(과 자막)을 먼저 저장 폴더로 옮기고, 그 최종 이름을 기준으로 변환본 이름을 정한다.
-            let original = finalize(cfg, &downloaded)?;
-            let stem = original
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("video");
-            let ext = encoded
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("mp4");
-            let dest = files::variant_path(&cfg.download_dir, stem, ext);
-            files::move_file(&encoded, &dest).map_err(io_fail)?;
-            Ok(dest)
-        }
-    }
+    finalize(cfg, &downloaded)
 }
 
-/// 로컬 파일 변환: 원본은 읽기만 하고, 결과를 `{원본}-{n}.{확장자}` 로 결과 폴더에 둔다.
+/// Local conversion: the source is only read; the result goes to the output folder as `{source}-{n}.{ext}`.
 async fn transcode_file(
     job: &Job,
     src: &Path,
@@ -154,7 +184,7 @@ async fn transcode_file(
     cancel: &CancellationToken,
     report: &mut impl FnMut(Report),
 ) -> Result<PathBuf, PipelineError> {
-    // 재시작이면 이전 부분 출력을 버린다(ffmpeg 는 이어서 인코딩하지 못한다).
+    // On restart drop the earlier partial output (ffmpeg cannot resume encoding).
     let _ = fs::remove_dir_all(cfg.work_dir.join("out"));
     let encoded = encode(job, cfg, cancel, src, report)
         .await?
@@ -163,7 +193,7 @@ async fn transcode_file(
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("mp4");
-    // 패키지 이름이 `{stem}-{n}.kiripart` 이므로 같은 번호로 꺼낸다. 이미 있으면 다음 번호.
+    // The package is named `{stem}-{n}.kiripart`, so the output takes the same number, or the next if taken.
     let pkg_stem = cfg
         .work_dir
         .file_stem()
@@ -203,6 +233,7 @@ async fn encode(
         progress: 0.0,
         speed: None,
         eta: None,
+        original: None,
     });
     match encode_once(job, cfg, cancel, input, &output, hw, report).await {
         Err(e @ RunError::Failed { .. }) if hw => {
@@ -246,14 +277,15 @@ async fn encode_once(
                 progress: p,
                 speed: None,
                 eta: None,
+                original: None,
             });
         }
     })
     .await
 }
 
-/// 결과물과 자막을 저장 위치로 옮긴다. 같은 이름이 있으면 " (n)" 을 붙인다.
-/// 자막은 플레이어가 파일 이름(stem)으로 짝을 찾으므로 최종 미디어 이름을 따라간다.
+/// Moves the output and subtitles to the destination, adding " (n)" on name clashes.
+/// Subtitles follow the final media name, since players pair them by stem.
 fn finalize(cfg: &PipelineCfg, media: &Path) -> Result<PathBuf, PipelineError> {
     let name = media
         .file_name()
@@ -261,7 +293,7 @@ fn finalize(cfg: &PipelineCfg, media: &Path) -> Result<PathBuf, PipelineError> {
         .unwrap_or("video");
     let dest = files::unique_path(&cfg.download_dir, name);
     files::move_file(media, &dest).map_err(io_fail)?;
-    // 자막은 `<원본 stem>.<lang>.srt`. 인코딩 결과도 stem 은 그대로이므로 media 에서 얻는다.
+    // Subtitles are `<source stem>.<lang>.srt`. Encoding keeps the stem, so take it from media.
     let stem = media
         .file_stem()
         .and_then(|s| s.to_str())
@@ -308,12 +340,91 @@ mod tests {
     }
 
     async fn go(e: &Env, preset: Preset) -> (Result<PathBuf, PipelineError>, Vec<Report>) {
+        go_job(e, &job(preset)).await
+    }
+
+    async fn go_job(e: &Env, j: &Job) -> (Result<PathBuf, PipelineError>, Vec<Report>) {
         let mut reports = vec![];
-        let r = run(&job(preset), &e.cfg, &CancellationToken::new(), |r| {
-            reports.push(r)
-        })
-        .await;
+        let r = run(j, &e.cfg, &CancellationToken::new(), |r| reports.push(r)).await;
         (r, reports)
+    }
+
+    fn reported_original(reports: &[Report]) -> Vec<PathBuf> {
+        reports.iter().filter_map(|r| r.original.clone()).collect()
+    }
+
+    #[tokio::test]
+    async fn original_is_in_download_dir_before_encoding_starts() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, false);
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        // ffmpeg fails unless the saved original exists and is the input it was given.
+        let body = format!(
+            "DOWNLOAD_DIR='{}'\n\
+             [ -f \"$DOWNLOAD_DIR/Fake Video.mp4\" ] || exit 1\n\
+             case \"$*\" in *\"-i $DOWNLOAD_DIR/Fake Video.mp4 \"*) ;; *) exit 1;; esac\n{FAKE_FFMPEG}",
+            e.cfg.download_dir.display()
+        );
+        testutil::script(e.cfg.tools.ffmpeg.parent().unwrap(), "ffmpeg", &body);
+        let (r, reports) = go(&e, Preset::Mp4H264).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
+        assert_eq!(reported_original(&reports), vec![original.clone()]);
+        assert!(original.exists());
+        assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
+    }
+
+    #[tokio::test]
+    async fn encode_failure_keeps_saved_original() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, "echo 'Error: boom' >&2; exit 1", true);
+        let (r, reports) = go(&e, Preset::Mp4H264).await;
+        assert_eq!(r, Err(PipelineError::Failed("Error: boom".into())));
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        assert!(
+            original.exists(),
+            "original must survive a failed conversion"
+        );
+        assert_eq!(reported_original(&reports), vec![original]);
+    }
+
+    #[tokio::test]
+    async fn resume_with_saved_original_skips_download() {
+        let e = env("exit 1", FAKE_FFMPEG, true);
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(&original, "orig").unwrap();
+        let mut j = job(Preset::Mp4H264);
+        j.original = Some(original.clone());
+        let (r, reports) = go_job(&e, &j).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
+        assert_eq!(fs::read_to_string(&original).unwrap(), "orig");
+        assert!(reports.iter().all(|r| r.stage == Stage::Encoding));
+    }
+
+    #[tokio::test]
+    async fn missing_saved_original_redownloads() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        let mut j = job(Preset::Mp4H264);
+        j.original = Some(e.cfg.download_dir.join("gone.mp4"));
+        let (r, reports) = go_job(&e, &j).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        assert!(original.exists());
+        assert_eq!(reported_original(&reports), vec![original]);
+    }
+
+    #[tokio::test]
+    async fn collision_names_variant_after_final_original() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(e.cfg.download_dir.join("Fake Video.mp4"), "old").unwrap();
+        let (r, reports) = go(&e, Preset::MovProres).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video (1)-1.mov"));
+        let original = e.cfg.download_dir.join("Fake Video (1).mp4");
+        assert!(original.exists());
+        assert_eq!(reported_original(&reports), vec![original]);
+        assert_eq!(
+            fs::read_to_string(e.cfg.download_dir.join("Fake Video.mp4")).unwrap(),
+            "old"
+        );
     }
 
     #[tokio::test]
@@ -324,7 +435,7 @@ mod tests {
         assert_eq!(out, e.cfg.download_dir.join("Fake Video.mp4"));
         assert!(out.exists());
         assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
-        // 영상+오디오 작업이라 영상 50% 는 전체의 47.5% (영상 몫 95%)
+        // video + audio job, so video at 50% is 47.5% overall (video is 95%)
         assert!(
             reports
                 .iter()
@@ -357,7 +468,7 @@ mod tests {
         fs::create_dir_all(&e.cfg.download_dir).unwrap();
         fs::write(e.cfg.download_dir.join("Fake Video-1.mov"), "earlier").unwrap();
         let (r, _) = go(&e, Preset::Mp4H264).await;
-        // 원본은 같은 이름이 없으니 Fake Video.mp4, 변환본은 기존 -1 다음인 -2
+        // the original has no clash, so Fake Video.mp4; the conversion is -2, after the existing -1
         assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-2.mp4"));
         assert!(e.cfg.download_dir.join("Fake Video.mp4").exists());
     }
@@ -384,7 +495,7 @@ mod tests {
         let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG_VT_FAILS, false);
         let (r, _) = go(&e, Preset::Mp4H264).await;
         assert!(r.is_ok());
-        assert!(!e.cfg.log_path.exists()); // 재시도 로그가 없어야 한다
+        assert!(!e.cfg.log_path.exists()); // no retry log expected
     }
 
     #[tokio::test]
@@ -431,7 +542,7 @@ mod tests {
             fs::read_to_string(e.cfg.download_dir.join("Fake Video.mp4")).unwrap(),
             "old"
         );
-        // 자막 이름은 최종 미디어 이름을 따라가야 한다 (플레이어가 stem 으로 짝을 찾는다).
+        // Subtitle names must follow the final media name (players pair by stem).
         assert!(e.cfg.download_dir.join("Fake Video (1).ko.srt").exists());
         assert!(!e.cfg.download_dir.join("Fake Video.ko.srt").exists());
     }

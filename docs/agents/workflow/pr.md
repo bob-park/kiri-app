@@ -10,21 +10,19 @@ related:
 
 # Pull Requests
 
-> PRs target `develop` (hotfixes and release promotion target `main`). The PR title (or a `major`/`minor` label) decides the version bump when it merges into `develop`.
+> Every PR targets `master`. The PR title (or a `major`/`minor` label) decides the version bump when it merges.
 
 ## Base Branch
 
 | Source branch | PR base |
 | ------------- | ------- |
-| `feature/**` and other day-to-day branches | `develop` |
-| `hotfix/**` | `main` (then back-merge into `develop`) |
-| release promotion (`develop` → `main`) | `main` |
+| `feature/**`, `hotfix/**`, any other work branch | `master` |
 
 ## Title
 
 A short, imperative summary. **Do not** prefix it with `feat:`/`fix:` — those belong on commits.
 
-Merging into `develop` (or a `hotfix/*` PR into `main`) runs `.github/workflows/bump-version.yml`:
+Merging into `master` runs `.github/workflows/bump-version.yml`:
 
 | PR title contains / label | Bump |
 | ------------------------- | ---- |
@@ -35,9 +33,14 @@ Merging into `develop` (or a `hotfix/*` PR into `main`) runs `.github/workflows/
 Examples:
 
 ```text
-add note search
-[minor] add notes domain with sync
-[major] migrate settings storage to a new schema
+fix updater signature check
+[minor] aurora glass redesign
+[major] drop the legacy queue.json import
 ```
 
-Both merge commits (`Merge pull request #N …`) and squash merges (`Title (#N)`) are recognized.
+Both merge commits (`Merge pull request #N …`) and squash merges (`Title (#N)`) are recognized. A push to `master` with no PR number bumps `patch`.
+
+## Description
+
+- Summarize what changed and how it was verified (the four checks in [testing](../testing.md); light/dark × ko/en for UI).
+- List pre-existing convention violations you noticed but did not fix as follow-ups, instead of fixing them in the same PR.

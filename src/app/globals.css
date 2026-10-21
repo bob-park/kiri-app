@@ -1,0 +1,334 @@
+@import 'tailwindcss';
+@import 'pretendard/dist/web/variable/pretendardvariable.css';
+@source not '../../docs';
+@plugin 'daisyui' {
+  themes: false;
+  exclude: rootcolor, glass; /* our .glass (Aurora Glass) replaces daisyUI's */
+}
+@plugin 'daisyui/theme' {
+  name: 'dark';
+  color-scheme: dark;
+  --color-base-100: #121318;
+  --color-base-200: #1d1e25;
+  --color-base-300: #2c2e38;
+  --color-base-content: #ececf2;
+  --color-neutral: #1d1e25;
+  --color-neutral-content: #ececf2;
+  --color-primary: #8b5cff;
+  --color-primary-content: #ffffff;
+  --color-secondary: rgba(139, 92, 255, 0.22);
+  --color-secondary-content: #c4b0ff;
+  --color-accent: #8b5cff;
+  --color-accent-content: #ffffff;
+  --color-info: #9b7cff;
+  --color-info-content: #101114;
+  --color-success: #4cd393;
+  --color-success-content: #101114;
+  --color-warning: #fbbf24;
+  --color-warning-content: #101114;
+  --color-error: #f3727f;
+  --color-error-content: #101114;
+  --radius-box: 14px;
+  --radius-field: 12px;
+  --radius-selector: 6px;
+  --size-field: 0.25rem;
+  --size-selector: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+@plugin 'daisyui/theme' {
+  name: 'light';
+  default: true;
+  color-scheme: light;
+  --color-base-100: #f6f5fb;
+  --color-base-200: #f6f6f9;
+  --color-base-300: #dedee5;
+  --color-base-content: #101114;
+  --color-neutral: #f6f6f9;
+  --color-neutral-content: #101114;
+  --color-primary: #7132f5;
+  --color-primary-content: #ffffff;
+  --color-secondary: rgba(133, 91, 251, 0.16);
+  --color-secondary-content: #5b1ecf;
+  --color-accent: #7132f5;
+  --color-accent-content: #ffffff;
+  --color-info: #5741d8;
+  --color-info-content: #ffffff;
+  --color-success: #149e61;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #101114;
+  --color-error: #d33a4a;
+  --color-error-content: #ffffff;
+  --radius-box: 14px;
+  --radius-field: 12px;
+  --radius-selector: 6px;
+  --size-field: 0.25rem;
+  --size-selector: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
+}
+/* Aurora Glass tokens (light values; dark overrides below). `static` keeps every variable in the output. */
+@theme static {
+  --color-glass: rgba(255, 255, 255, 0.58);
+  --color-glass-edge: rgba(255, 255, 255, 0.85);
+  --color-aurora-1: #a98bff;
+  --color-aurora-2: #7fd4ff;
+  --color-aurora-3: #ffb3d9;
+  --color-muted: #686b82;
+  --color-track: rgba(113, 50, 245, 0.12);
+  --color-scrim: rgba(246, 245, 251, 0.35);
+  --gradient-progress: linear-gradient(90deg, #7132f5, #5fc3ff);
+  --gradient-progress-encoding: linear-gradient(90deg, #5741d8, #7fd4ff);
+
+  /* Theme picker thumbnails: each depicts a fixed theme, so one value serves both themes. */
+  --color-preview-light: #f6f5fb;
+  --color-preview-light-bar: #ffffff;
+  --color-preview-light-edge: #e6e4f0;
+  --color-preview-dark: #121318;
+  --color-preview-dark-bar: #262833;
+
+  --shadow-glass: 0 4px 24px rgba(16, 17, 20, 0.05);
+  --shadow-keycap: 0 2px 0 rgba(16, 17, 20, 0.06);
+
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+
+  --animate-drift: drift 12s ease-in-out infinite;
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-spring-in: spring-in 650ms var(--ease-spring) both;
+  --animate-pop: pop 450ms var(--ease-spring) both;
+  --animate-ring: ring 900ms ease-out 200ms;
+  --animate-flow: flow 1.6s linear infinite;
+  --animate-shimmer: shimmer 1.2s linear infinite;
+  --animate-collapse-out: collapse-out 200ms ease-in forwards;
+  --animate-sheet-up: sheet-up 550ms var(--ease-spring) both;
+  --animate-key-press: key-press 250ms ease-out;
+}
+[data-theme='dark'] {
+  --color-glass: rgba(30, 31, 40, 0.55);
+  --color-glass-edge: rgba(255, 255, 255, 0.08);
+  --color-aurora-1: #5b3bd6;
+  --color-aurora-2: #1f6f9e;
+  --color-aurora-3: #7a2d63;
+  --color-muted: #8b8ea3;
+  --color-track: rgba(139, 92, 255, 0.18);
+  --color-scrim: rgba(0, 0, 0, 0.3);
+  --gradient-progress: linear-gradient(90deg, #8b5cff, #5fc3ff);
+  --gradient-progress-encoding: linear-gradient(90deg, #6f63ff, #7fd4ff);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@layer components {
+  .float-shadow {
+    box-shadow: 0 12px 32px rgba(16, 17, 20, 0.18);
+  }
+  .chip {
+    @apply inline-flex items-center rounded-[6px] px-[7px] py-[2px] text-[10px] font-semibold whitespace-nowrap;
+  }
+  .chip-run {
+    @apply bg-secondary text-secondary-content;
+  }
+  .chip-err {
+    @apply bg-error/15 text-error;
+  }
+  .chip-idle {
+    @apply bg-base-content/10 text-base-content/70;
+  }
+
+  .glass {
+    background-color: var(--color-glass);
+    border: 1px solid var(--color-glass-edge);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+  }
+
+  /* Drifting background: an .aurora container holding up to three .aurora-blob children. */
+  .aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .aurora-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(46px);
+    opacity: 0.55;
+    animation: var(--animate-drift);
+  }
+  .aurora-blob:nth-child(1) {
+    width: 230px;
+    height: 230px;
+    top: -70px;
+    left: -70px;
+    background: var(--color-aurora-1);
+  }
+  .aurora-blob:nth-child(2) {
+    width: 210px;
+    height: 210px;
+    right: -60px;
+    bottom: -50px;
+    background: var(--color-aurora-2);
+    animation-delay: -4s;
+  }
+  .aurora-blob:nth-child(3) {
+    width: 140px;
+    height: 140px;
+    top: 45%;
+    left: 40%;
+    background: var(--color-aurora-3);
+    opacity: 0.3;
+    animation-delay: -8s;
+  }
+  .aurora-blob:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, 25px) scale(1.12);
+  }
+  66% {
+    transform: translate(-15px, 10px) scale(0.95);
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(3deg);
+  }
+}
+@keyframes spring-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.94);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ring {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 45%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-success) 0%, transparent);
+  }
+}
+/* Pair with background-size: 200% 100% on the progress fill. */
+@keyframes flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+/* Pair with background-size: 200px 100% on the skeleton. */
+@keyframes shimmer {
+  from {
+    background-position: -200px 0;
+  }
+  to {
+    background-position: 200px 0;
+  }
+}
+@keyframes sheet-up {
+  from {
+    opacity: 0.6;
+    transform: translateY(110%) scale(0.96);
+  }
+}
+@keyframes key-press {
+  40% {
+    transform: translateY(2px) scale(0.94);
+    box-shadow: none;
+  }
+}
+@keyframes collapse-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.animate-toast-in {
+  animation: toast-in 150ms ease-out;
+}
+.animate-toast-out {
+  animation: toast-out 150ms ease-in forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob,
+  .animate-drift,
+  .animate-float,
+  .animate-spring-in,
+  .animate-pop,
+  .animate-ring,
+  .animate-flow,
+  .animate-shimmer,
+  .animate-sheet-up,
+  .animate-key-press,
+  .animate-toast-in {
+    animation: none;
+  }
+  .animate-collapse-out,
+  .animate-toast-out {
+    animation: none;
+    opacity: 0;
+  }
+}

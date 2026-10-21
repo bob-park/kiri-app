@@ -31,12 +31,13 @@ If the DB's `user_version` is **higher** than `MIGRATIONS.len()` (an older build
 
 - **Never edit, reorder, or delete a shipped file.** Installed apps have already recorded that version. To fix a mistake, add a new migration.
 - Don't put `BEGIN`/`COMMIT` or `PRAGMA user_version` inside the SQL file; `migrate` handles both.
-- Seed defaults in the migration only when every install needs the row. Otherwise, fall back in code. For example, `settings::auto_update` treats a missing row as `true`.
-- Readers must tolerate unknown or old values. `settings::theme` maps garbage to `System` instead of failing.
+- Seed defaults in the migration only when every install needs the row. Otherwise, fall back in code. For example, a missing `settings` section row reads as that section's `Default` (`#[serde(default)]` on every settings struct).
+- Readers must tolerate unknown or old values. A `settings` row that no longer parses is skipped (logged) and its section falls back to defaults; `Settings::normalize` maps the dropped `ja` language to `system` and clamps `max_concurrent`.
+- JSON-in-a-column (`settings.value`, `jobs.data`) changes shape through serde defaults, not migrations. Add new fields with a default so old rows still parse.
 - A destructive change (dropping or renaming a column) needs the user's confirmation first, because it touches real user data.
 
 ## Tests
 
 - Use `db::open_in_memory()` (migrated, `#[cfg(test)]` only) for domain tests.
-- Use `tempfile::tempdir()` with `db::open(path)` when the test is about files: first launch, reopen, parent dir creation.
+- Use `tempfile::tempdir()` with `db::open(path)` when the test is about files: first launch, reopen, parent dir creation, the `settings.json` / `queue.json` import.
 - Every new migration needs a test that reopens a DB at the previous version (or a fresh one) and checks the new shape and seed rows.

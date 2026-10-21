@@ -10,17 +10,16 @@ related:
 
 # Branch Naming
 
-> `main` = released code, `develop` = next release. Work on `feature/<topic>` or `hotfix/<topic>` (lowercase kebab-case) and merge through a PR.
+> `master` is the only long-lived branch. Work on `feature/<topic>` or `hotfix/<topic>` (lowercase kebab-case), branched from `master`, and merge back through a PR. Every merge into `master` bumps the version.
 
 | Branch | Purpose |
 | ------ | ------- |
-| `main` | Production-ready code. Releases are built and tagged from here (see [release](release.md)). |
-| `develop` | Integration branch for the next release. Every merge bumps the version ([versioning](versioning.md)). |
-| `feature/<topic>` | Feature work. Branch from `develop`, PR back to `develop`. |
-| `hotfix/<topic>` | Urgent fix to a release. Branch from `main`, PR to `main` (the merge bumps the patch version), release, then merge `main` back into `develop`. |
+| `master` | The released line. Every PR merge bumps the version ([versioning](versioning.md)); releases are built and tagged from here ([release](release.md)). |
+| `feature/<topic>` | Feature work, refactors, docs. Branch from `master`, PR back to `master`. |
+| `hotfix/<topic>` | Urgent fix to a shipped version. Same flow as a feature; the name only signals urgency. |
 
 Rules:
 
-- `<topic>` is lowercase kebab-case (`feature/note-search`, `hotfix/updater-signature`).
-- No direct commits to `main` or `develop` — always a PR. Base-branch rules: [pr](pr.md#base-branch).
-- Release tags are `v<X.Y.Z>` and are created by the release scripts on `main`.
+- `<topic>` is lowercase kebab-case (`feature/aurora-redesign`, `hotfix/updater-signature`).
+- No direct commits to `master` — always a PR. The version-bump bot is the only exception.
+- Release tags are `v<X.Y.Z>`, created on `master` when a release is published.

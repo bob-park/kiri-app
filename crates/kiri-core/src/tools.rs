@@ -1,5 +1,5 @@
-//! yt-dlp·Deno 를 GitHub Release 에서 받아 SHA256 으로 검증하고 설치한다.
-//! reqwest 로 받은 파일엔 quarantine 속성이 없어 Gatekeeper 에 막히지 않는다.
+//! Downloads yt-dlp and Deno from GitHub Releases, verifies SHA256 and installs them.
+//! Files fetched with reqwest carry no quarantine attribute, so Gatekeeper does not block them.
 use crate::runner;
 use sha2::{Digest, Sha256};
 use std::{fs, io, os::unix::fs::PermissionsExt, path::Path, time::Duration};
@@ -13,12 +13,12 @@ const DENO_URL: &str =
     "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip";
 const DENO_SUM_URL: &str = "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip.sha256sum";
 
-/// 멈춘 연결이 첫 실행 설치를 영원히 붙잡지 않게 타임아웃을 둔다.
+/// Timeouts, so a stalled connection never holds the first-run install forever.
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent(concat!("kiri/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(300)) // 느린 회선의 yt-dlp/Deno 전체 다운로드까지는 허용
+        .timeout(Duration::from_secs(300)) // long enough for a full yt-dlp/Deno download on a slow line
         .https_only(true)
         .build()
         .expect("static client config")
@@ -35,7 +35,7 @@ fn is_hex64(s: &str) -> bool {
     s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-/// "<hash>  <file>" 줄에서 file 의 해시. 해시만 한 줄 있는 파일(단일 .sha256sum)은 그 해시.
+/// The hash for `file` from "<hash>  <file>" lines. A file with just one hash line (single .sha256sum) yields that hash.
 pub fn find_hash(sums: &str, file: &str) -> Option<String> {
     let lines: Vec<&str> = sums
         .lines()
@@ -59,7 +59,7 @@ pub fn install_executable(dest: &Path, bytes: &[u8]) -> io::Result<()> {
     let tmp = dest.with_extension("tmp");
     fs::write(&tmp, bytes)?;
     fs::set_permissions(&tmp, fs::Permissions::from_mode(0o755))?;
-    fs::rename(tmp, dest) // 실행 중인 프로세스가 연 이전 파일(inode)은 그대로 남는다
+    fs::rename(tmp, dest) // a running process keeps the old file (inode) it opened
 }
 
 async fn fetch(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
@@ -79,24 +79,41 @@ async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, Strin
     String::from_utf8(fetch(client, url).await?).map_err(|e| format!("{url}: {e}"))
 }
 
-/// 설치된 파일의 해시가 최신 SHA2-256SUMS 와 같으면 아무것도 하지 않는다.
+/// Does nothing if the installed file's hash matches the latest SHA2-256SUMS.
 pub async fn ensure_ytdlp(client: &reqwest::Client, dest: &Path) -> Result<bool, String> {
-    let sums = fetch_text(client, YTDLP_SUMS_URL).await?;
-    let want = find_hash(&sums, YTDLP_ASSET).ok_or("yt-dlp checksum not found")?;
-    if let Ok(current) = fs::read(dest) {
-        if sha256_hex(&current) == want {
-            return Ok(false);
-        }
+    let want = ytdlp_latest_hash(client).await?;
+    if ytdlp_matches(dest, &want) {
+        return Ok(false);
     }
+    install_ytdlp(client, dest, &want).await?;
+    Ok(true)
+}
+
+/// The SHA256 of the latest yt-dlp release (network check only, no download).
+pub async fn ytdlp_latest_hash(client: &reqwest::Client) -> Result<String, String> {
+    let sums = fetch_text(client, YTDLP_SUMS_URL).await?;
+    find_hash(&sums, YTDLP_ASSET).ok_or_else(|| "yt-dlp checksum not found".into())
+}
+
+/// Whether the installed yt-dlp already has hash `want`.
+pub fn ytdlp_matches(dest: &Path, want: &str) -> bool {
+    fs::read(dest).is_ok_and(|current| sha256_hex(&current) == want)
+}
+
+/// Downloads yt-dlp, verifies it against `want` and installs it at `dest`.
+pub async fn install_ytdlp(
+    client: &reqwest::Client,
+    dest: &Path,
+    want: &str,
+) -> Result<(), String> {
     let bytes = fetch(client, YTDLP_URL).await?;
     if sha256_hex(&bytes) != want {
         return Err("yt-dlp checksum mismatch".into());
     }
-    install_executable(dest, &bytes).map_err(|e| e.to_string())?;
-    Ok(true)
+    install_executable(dest, &bytes).map_err(|e| e.to_string())
 }
 
-/// ponytail: 없을 때만 설치한다. 갱신은 yt-dlp 가 새 Deno 를 요구하는 일이 생기면 추가한다.
+/// ponytail: installs only when missing. Add updating once yt-dlp ever needs a newer Deno.
 pub async fn ensure_deno(client: &reqwest::Client, dest: &Path) -> Result<bool, String> {
     if dest.exists() {
         return Ok(false);
@@ -141,7 +158,7 @@ mod tests {
     const H1: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const H2: &str = "2222222222222222222222222222222222222222222222222222222222222222";
 
-    /// 타임아웃·https_only 설정이 빌드 가능한 조합인지(=`expect` 가 터지지 않는지).
+    /// The timeout + https_only combination builds (the `expect` never fires).
     #[test]
     fn http_client_builds() {
         let _ = http_client();

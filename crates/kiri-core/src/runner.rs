@@ -1,4 +1,4 @@
-//! 자식 프로세스 실행. 줄 단위 출력 콜백, 취소(프로세스 그룹 kill), 실패 시 stderr 꼬리.
+//! Child process runner: per-line output callback, cancellation (process-group kill), stderr tail on failure.
 use std::{collections::VecDeque, fmt, path::Path, process::Stdio};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -17,7 +17,7 @@ pub enum RunError {
 }
 
 impl RunError {
-    /// 사용자에게 보여줄 한 줄: stderr 의 마지막 비어 있지 않은 줄.
+    /// One line for the user: the last non-empty stderr line.
     pub fn summary(&self) -> String {
         match self {
             RunError::Cancelled => "cancelled".into(),
@@ -42,26 +42,26 @@ fn command(program: &Path, args: &[String]) -> Command {
     let mut c = Command::new(program);
     c.args(args)
         .stdin(Stdio::null())
-        .process_group(0) // 취소 시 손자까지 한 번에 죽이기 위해
+        .process_group(0) // so cancelling kills grandchildren too
         .kill_on_drop(true);
     c
 }
 
-/// 프로세스 그룹을 지키는 가드. `kill_on_drop` 은 직접 자식만 죽이므로, future 가
-/// drop 되면(런타임 종료, task abort, timeout) 손자가 그룹에 남는다. Drop 에서
-/// 그룹 전체를 죽이고, 정상적으로 wait 해 reap 한 뒤에는 disarm 한다 — 재활용된
-/// pgid 에 시그널을 보내지 않기 위해.
+/// Guards the process group. `kill_on_drop` kills only the direct child, so when the future
+/// is dropped (runtime shutdown, task abort, timeout) grandchildren stay in the group. Drop
+/// kills the whole group; after a normal wait reaps the child the guard is disarmed, so no
+/// signal ever reaches a recycled pgid.
 struct GroupGuard(Option<i32>);
 
 impl GroupGuard {
     fn arm(child: &tokio::process::Child) -> Self {
-        // process_group(0) 로 띄웠으므로 자식 pid == pgid.
+        // Spawned with process_group(0), so the child pid == pgid.
         Self(child.id().map(|p| p as i32))
     }
 
     fn kill(&self) {
         if let Some(pgid) = self.0 {
-            // SAFETY: killpg 는 시그널만 보낸다. 실패(이미 종료)는 무시한다.
+            // SAFETY: killpg only sends a signal. Failure (already exited) is ignored.
             unsafe {
                 libc::killpg(pgid, libc::SIGKILL);
             }
@@ -90,7 +90,7 @@ pub async fn run(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| RunError::Spawn(format!("{}: {e}", program.display())))?;
-    // child 보다 늦게 선언 → 더 먼저 drop 된다(자식이 아직 살아 있는 동안 killpg).
+    // Declared after child → dropped before it (killpg while the child is still alive).
     let mut guard = GroupGuard::arm(&child);
 
     let (tx, mut rx) = mpsc::unbounded_channel::<(bool, String)>();
@@ -119,7 +119,7 @@ pub async fn run(
         tokio::select! {
             _ = cancel.cancelled() => {
                 guard.kill();
-                let _ = child.start_kill(); // killpg 가 못 닿는 경우의 대비
+                let _ = child.start_kill(); // fallback when killpg cannot reach it
                 let _ = child.wait().await;
                 guard.disarm();
                 return Err(RunError::Cancelled);
@@ -134,21 +134,21 @@ pub async fn run(
                     }
                     on_line(&line);
                 }
-                None => break, // 두 스트림 모두 닫힘
+                None => break, // both streams closed
             }
         }
     }
     let status = tokio::select! {
         _ = cancel.cancelled() => {
             guard.kill();
-            let _ = child.start_kill(); // killpg 가 못 닿는 경우의 대비
+            let _ = child.start_kill(); // fallback when killpg cannot reach it
             let _ = child.wait().await;
             guard.disarm();
             return Err(RunError::Cancelled);
         }
         s = child.wait() => s.map_err(|e| RunError::Spawn(e.to_string()))?,
     };
-    guard.disarm(); // reap 완료
+    guard.disarm(); // reaped
     if status.success() {
         Ok(())
     } else {
@@ -158,7 +158,7 @@ pub async fn run(
     }
 }
 
-/// 짧은 명령의 stdout 전체 (probe, --version).
+/// The whole stdout of a short command (probe, --version).
 pub async fn output(program: &Path, args: &[String]) -> Result<String, RunError> {
     let child = command(program, args)
         .stdout(Stdio::piped())
@@ -170,7 +170,7 @@ pub async fn output(program: &Path, args: &[String]) -> Result<String, RunError>
         .wait_with_output()
         .await
         .map_err(|e| RunError::Spawn(format!("{}: {e}", program.display())))?;
-    guard.disarm(); // reap 완료
+    guard.disarm(); // reaped
     if out.status.success() {
         return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
     }
@@ -235,7 +235,7 @@ mod tests {
         assert!(matches!(err, RunError::Spawn(_)), "{err:?}");
     }
 
-    /// 손자(`sleep 30`)를 띄우는 스크립트를 task 로 돌리고 그 손자 pid 를 준다.
+    /// Runs a script that spawns a grandchild (`sleep 30`) as a task and returns that pid.
     async fn spawn_slow(
         dir: &Path,
         cancel: CancellationToken,
@@ -258,7 +258,7 @@ mod tests {
         (task, pid)
     }
 
-    /// pid 가 사라질 때까지 최대 2초 폴링.
+    /// Polls up to 2 s for the pid to disappear.
     async fn gone(pid: i32) -> bool {
         for _ in 0..100 {
             if unsafe { libc::kill(pid, 0) } != 0 {
@@ -286,7 +286,7 @@ mod tests {
         );
     }
 
-    /// 취소 토큰 없이 future 가 drop 되는 경로(런타임 종료, task abort, timeout).
+    /// The future is dropped without the cancel token (runtime shutdown, task abort, timeout).
     #[tokio::test]
     async fn dropping_the_future_kills_whole_process_group() {
         let d = tempfile::tempdir().unwrap();

@@ -1,7 +1,34 @@
-//! 큐의 순수 상태. 동시성·프로세스는 engine 이 맡고, 여기는 목록과 파일만 다룬다.
+//! Plain queue state. The engine owns concurrency and processes; this handles the list and the file only.
 use crate::model::{Job, JobState, NewJob};
 use serde::{Deserialize, Serialize};
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+/// Where the engine persists the queue. `save` is called while the engine holds its
+/// state lock, so an implementation must never call back into the engine.
+pub trait QueueStore: Send + Sync {
+    /// The second value says whether the stored queue can be trusted (intact or not
+    /// there yet). The engine only cleans up orphan packages when it is true.
+    fn load(&self) -> (QueueState, bool);
+    fn save(&self, state: &QueueState) -> io::Result<()>;
+}
+
+/// The pre-SQLite `queue.json` store. Kept for tests and the one-time import.
+pub struct JsonQueueStore {
+    pub path: PathBuf,
+}
+
+impl QueueStore for JsonQueueStore {
+    fn load(&self) -> (QueueState, bool) {
+        QueueState::load_checked(&self.path)
+    }
+
+    fn save(&self, state: &QueueState) -> io::Result<()> {
+        state.save(&self.path)
+    }
+}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
@@ -10,7 +37,7 @@ pub struct QueueState {
     pub jobs: Vec<Job>,
 }
 
-/// v0.1.x queue.json: 작업에 `source` 대신 `url` 만 있다. YouTube 작업으로 바꿔 읽는다.
+/// v0.1.x queue.json: jobs have `url` instead of `source`. Read them as YouTube jobs.
 fn migrate_legacy(v: &mut serde_json::Value) {
     let Some(jobs) = v.get_mut("jobs").and_then(|j| j.as_array_mut()) else {
         return;
@@ -45,6 +72,7 @@ impl QueueState {
             eta: None,
             output: None,
             work_dir: None,
+            original: None,
             created_at: now_ms,
         };
         self.jobs.push(job.clone());
@@ -60,7 +88,7 @@ impl QueueState {
         Some(self.jobs.remove(i))
     }
 
-    /// busy(id) 가 아닌 대기 작업 중 가장 오래된 것 (id 가 곧 추가 순서).
+    /// The oldest queued job that is not busy(id) (ids follow insertion order).
     pub fn next_queued(&self, busy: impl Fn(u64) -> bool) -> Option<u64> {
         self.jobs
             .iter()
@@ -69,7 +97,7 @@ impl QueueState {
             .min()
     }
 
-    /// 앱이 작업 도중 꺼졌던 경우: 돌던 작업을 다시 대기열로.
+    /// The app quit mid-job: put running jobs back in the queue.
     pub fn recover(&mut self) {
         for j in &mut self.jobs {
             if j.state.is_active() {
@@ -85,7 +113,7 @@ impl QueueState {
         Self::load_checked(path).0
     }
 
-    /// 두 번째 값은 파일을 믿을 수 있는지(정상이거나 아직 없음). 손상·읽기 오류면 false.
+    /// The second value says whether the file is trusted (valid or not there yet). False on corruption or read errors.
     pub fn load_checked(path: &Path) -> (QueueState, bool) {
         let (mut q, trusted): (QueueState, bool) = match fs::read_to_string(path) {
             Ok(text) => match serde_json::from_str::<serde_json::Value>(&text).and_then(|mut v| {
@@ -94,8 +122,8 @@ impl QueueState {
             }) {
                 Ok(q) => (q, true),
                 Err(e) => {
-                    // 다음 save 가 덮어쓰기 전에 손상된 파일을 남겨 둔다.
-                    eprintln!("kiri queue: parse error, moved to .bad, starting empty: {e}");
+                    // Keep the corrupt file before the next save overwrites it.
+                    log::error!("queue parse error, moved to .bad, starting empty: {e}");
                     let _ = fs::rename(path, path.with_extension("json.bad"));
                     (QueueState::default(), false)
                 }
@@ -103,15 +131,19 @@ impl QueueState {
             Err(e) => {
                 let missing = e.kind() == io::ErrorKind::NotFound;
                 if !missing {
-                    eprintln!("kiri queue: read error, starting empty: {e}");
+                    log::error!("queue read error, starting empty: {e}");
                 }
                 (QueueState::default(), missing)
             }
         };
-        // 손상된 next_id 보정. 빈 목록이면 0 그대로 두고 add 가 1 부터 센다.
-        let min_next = q.jobs.iter().map(|j| j.id + 1).max().unwrap_or(0);
-        q.next_id = q.next_id.max(min_next);
+        q.repair_next_id();
         (q, trusted)
+    }
+
+    /// Repairs a corrupt next_id. An empty list keeps 0 and add counts from 1.
+    pub fn repair_next_id(&mut self) {
+        let min_next = self.jobs.iter().map(|j| j.id + 1).max().unwrap_or(0);
+        self.next_id = self.next_id.max(min_next);
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -137,7 +169,7 @@ mod tests {
     fn loads_legacy_url_jobs() {
         let d = tempfile::tempdir().unwrap();
         let path = d.path().join("queue.json");
-        // v0.1.x 형식: source 없이 url, options 에 max_height 없음
+        // v0.1.x format: url without source, no max_height in options
         fs::write(
             &path,
             r#"{"next_id":2,"jobs":[{"id":1,"url":"https://youtu.be/x","title":"t",
@@ -273,7 +305,7 @@ mod tests {
         let mut q = QueueState::default();
         q.add(new_job("a"), 0);
         q.add(new_job("b"), 0);
-        q.next_id = 1; // 손상된 파일
+        q.next_id = 1; // corrupt file
         q.save(&path).unwrap();
         let mut loaded = QueueState::load(&path);
         assert_eq!(loaded.add(new_job("c"), 0).id, 3);

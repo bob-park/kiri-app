@@ -1,10 +1,11 @@
-//! 실제 소켓 서버(앱 대신 kiri-core Engine)에 CLI 바이너리를 붙여 본다.
+//! Runs the CLI binary against a real socket server (a kiri-core Engine standing in for the app).
 use kiri_core::{
     engine::{Engine, EngineConfig, EnginePaths},
     ipc,
     model::{Preset, Tools},
+    queue::JsonQueueStore,
 };
-use std::{path::Path, process::Command};
+use std::{path::Path, process::Command, sync::Arc};
 
 fn idle_engine(dir: &Path) -> Engine {
     let tools = Tools {
@@ -14,7 +15,9 @@ fn idle_engine(dir: &Path) -> Engine {
         ffprobe: dir.join("none/ffprobe"),
     };
     let paths = EnginePaths {
-        queue_file: dir.join("q.json"),
+        store: Arc::new(JsonQueueStore {
+            path: dir.join("q.json"),
+        }),
         cache_dir: dir.join("c"),
         log_dir: dir.join("l"),
     };
@@ -94,7 +97,9 @@ fn engine_with_ffprobe(dir: &Path) -> Engine {
         ffprobe,
     };
     let paths = EnginePaths {
-        queue_file: dir.join("q.json"),
+        store: Arc::new(JsonQueueStore {
+            path: dir.join("q.json"),
+        }),
         cache_dir: dir.join("c"),
         log_dir: dir.join("l"),
     };
@@ -175,7 +180,7 @@ async fn transcode_sends_absolute_path_with_spaces() {
 #[tokio::test(flavor = "multi_thread")]
 async fn transcode_missing_source_exits_1_without_app() {
     let d = tempfile::tempdir().unwrap();
-    // 앱이 없어도(소켓 없음) 원본 확인이 먼저라 2가 아니라 1로 끝난다.
+    // Even with no app (no socket) the source check comes first, so it exits 1, not 2.
     let (code, _, err) = kiri(
         &d.path().join("none.sock"),
         &["transcode", "/nope/x.mkv", "--format", "mp3"],

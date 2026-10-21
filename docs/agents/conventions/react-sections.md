@@ -31,7 +31,8 @@ Write any number of lines within a section. Small sub-components co-located in t
 ## Example
 
 ```tsx
-export default function UpdateSection() {
+// src/app/settings/_components/UpdateTab.tsx (trimmed)
+export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabProps>) {
   // state
   const [version, setVersion] = useState('');
 
@@ -39,8 +40,9 @@ export default function UpdateSection() {
   const { t } = useI18n();
 
   // queries
-  const { status } = useUpdateStatus();
-  const { checkUpdate, isLoading } = useUpdateCheck();
+  const { settings } = useSettings();
+  const { patchSettings } = useSettingsPatch();
+  const { checkUpdate, isLoading: checking } = useUpdateCheck();
 
   // useEffect
   useEffect(() => {
