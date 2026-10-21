@@ -2,10 +2,7 @@
 export const en = {
   app: {
     clearCompleted: 'Clear completed',
-    dropTitle: 'Paste or drop a YouTube link',
-    dropShortcut: 'to add it right away',
-    emptyDesc: 'Links you paste will show up here',
-    empty: 'No downloads yet',
+    emptyHint: 'Copy a YouTube link, then paste it',
     settings: 'Settings',
     toolsInstalling: (name: string) => `Downloading ${name}…`,
     toolsPreparingDesc: 'Downloading the components kiri needs on first launch. This takes a moment.',

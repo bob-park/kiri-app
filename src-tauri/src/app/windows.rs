@@ -29,12 +29,12 @@ pub fn show_main(app: &AppHandle) -> Result<(), String> {
         w.show().map_err(|e| e.to_string())?;
         return w.set_focus().map_err(|e| e.to_string());
     }
+    // Tauri's native drop handler stays on (no `disable_drag_drop_handler`): it swallows drops,
+    // so a link dropped on the window can't navigate the webview. Input is ⌘V only.
     let w = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("/".into()))
         .title("kiri")
-        .inner_size(720.0, 520.0)
-        .min_inner_size(560.0, 400.0)
-        // Tauri's file-drop handling is off so link drops arrive as HTML5 drop events.
-        .disable_drag_drop_handler()
+        .inner_size(760.0, 680.0)
+        .min_inner_size(600.0, 560.0)
         .build()
         .map_err(|e| e.to_string())?;
     let handle = w.clone();

@@ -3,7 +3,7 @@
 @source not '../../docs';
 @plugin 'daisyui' {
   themes: false;
-  exclude: rootcolor;
+  exclude: rootcolor, glass; /* our .glass (Aurora Glass) replaces daisyUI's */
 }
 @plugin 'daisyui/theme' {
   name: 'dark';
@@ -73,8 +73,6 @@
 
 @theme {
   --color-fg-muted: #8b8ea3;
-  --color-toast: #2c2e38;
-  --color-toast-content: #ffffff;
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
 }
 /* Aurora Glass tokens (light values; dark overrides below). `static` keeps every variable in the output. */
@@ -90,6 +88,9 @@
   --gradient-progress: linear-gradient(90deg, #7132f5, #5fc3ff);
   --gradient-progress-encoding: linear-gradient(90deg, #5741d8, #7fd4ff);
 
+  --shadow-glass: 0 4px 24px rgba(16, 17, 20, 0.05);
+  --shadow-keycap: 0 2px 0 rgba(16, 17, 20, 0.06);
+
   --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
 
   --animate-drift: drift 12s ease-in-out infinite;
@@ -100,10 +101,11 @@
   --animate-flow: flow 1.6s linear infinite;
   --animate-shimmer: shimmer 1.2s linear infinite;
   --animate-collapse-out: collapse-out 200ms ease-in forwards;
+  --animate-sheet-up: sheet-up 550ms var(--ease-spring) both;
+  --animate-key-press: key-press 250ms ease-out;
 }
 [data-theme='light'] {
   --color-fg-muted: #9497a9;
-  --color-toast: #101114;
 }
 [data-theme='dark'] {
   --color-glass: rgba(30, 31, 40, 0.55);
@@ -145,9 +147,6 @@ body {
   }
   .chip-run {
     @apply bg-secondary text-secondary-content;
-  }
-  .chip-ok {
-    @apply bg-success/15 text-success;
   }
   .chip-err {
     @apply bg-error/15 text-error;
@@ -276,6 +275,18 @@ body {
     background-position: 200px 0;
   }
 }
+@keyframes sheet-up {
+  from {
+    opacity: 0.6;
+    transform: translateY(110%) scale(0.96);
+  }
+}
+@keyframes key-press {
+  40% {
+    transform: translateY(2px) scale(0.94);
+    box-shadow: none;
+  }
+}
 @keyframes collapse-out {
   to {
     opacity: 0;
@@ -310,6 +321,8 @@ body {
   .animate-ring,
   .animate-flow,
   .animate-shimmer,
+  .animate-sheet-up,
+  .animate-key-press,
   .animate-toast-in {
     animation: none;
   }

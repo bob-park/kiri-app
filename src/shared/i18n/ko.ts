@@ -3,10 +3,7 @@ import type { Dict } from '@/shared/i18n/en';
 export const ko: Dict = {
   app: {
     clearCompleted: '완료 항목 정리',
-    dropTitle: 'YouTube 링크를 붙여넣거나 끌어다 놓으세요',
-    dropShortcut: '로 바로 추가',
-    emptyDesc: '링크를 붙여넣으면 여기에 나타나요',
-    empty: '아직 다운로드가 없습니다',
+    emptyHint: 'YouTube 링크를 복사한 뒤 붙여넣으세요',
     settings: '설정',
     toolsInstalling: (name) => `${name} 내려받는 중…`,
     toolsPreparingDesc: '처음 실행할 때 필요한 구성 요소를 내려받고 있습니다. 잠시만 기다려 주세요.',

@@ -87,10 +87,10 @@ function UpdateStatus({ pending }: Readonly<UpdateStatusProps>) {
             id={POPOVER_ID}
             popover="auto"
             style={{ inset: 'auto', right: 12, bottom: 40 }}
-            className="float-shadow border-base-300 bg-base-100 text-base-content fixed m-0 w-[260px] rounded-[14px] border p-3 font-normal"
+            className="glass float-shadow text-base-content fixed m-0 w-[260px] rounded-[14px] p-3 font-normal"
           >
             <div className="text-[12.5px] font-bold">{t.update.readyTitle(version)}</div>
-            <p className="text-fg-muted mt-1 text-[11px] leading-relaxed">{t.update.busyDesc(pending)}</p>
+            <p className="text-muted mt-1 text-[11px] leading-relaxed">{t.update.busyDesc(pending)}</p>
             <div className="mt-2.5 flex gap-1.5">
               <button className="btn btn-sm flex-1" onClick={() => handleInstall(false)}>
                 {t.update.installNow}
@@ -119,10 +119,10 @@ export default function StatusBar({ jobs }: Readonly<StatusBarProps>) {
   const pending = summary.filter(([k]) => k === 'running' || k === 'queued').reduce((a, [, n]) => a + n, 0);
 
   return (
-    <footer className="border-base-300 bg-base-200 text-fg-muted flex h-8 shrink-0 items-center gap-2.5 border-t px-3.5 text-[11px]">
+    <footer className="glass text-muted relative flex h-8 shrink-0 items-center gap-2.5 border-x-0 border-b-0 px-3.5 text-[11px] tabular-nums">
       {summary.map(([k, n], i) => (
         <Fragment key={k}>
-          {i > 0 && <span className="bg-base-300 h-3 w-px" />}
+          {i > 0 && <span className="bg-base-content/10 h-3 w-px" />}
           <span>{t.status[k](n)}</span>
         </Fragment>
       ))}

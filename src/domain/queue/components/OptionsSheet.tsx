@@ -28,20 +28,27 @@ interface SectionProps {
 function Section({ label, children }: Readonly<SectionProps>) {
   return (
     <div className="mt-3.5">
-      <div className="text-fg-muted mb-1.5 text-[10.5px] font-bold">{label}</div>
+      <div className="text-muted mb-1.5 text-[10.5px] font-bold">{label}</div>
       {children}
     </div>
   );
 }
 
-const chipClass = (on: boolean) =>
+// Selected chips and tiles grow a little and turn brand-colored.
+const choiceClass = (on: boolean) =>
   cx(
-    'has-focus-visible:outline-primary mr-1 mb-1 inline-flex cursor-pointer items-center rounded-lg border px-2.5 py-1 text-[11px] has-focus-visible:outline-2',
+    'has-focus-visible:outline-primary cursor-pointer rounded-[10px] border transition-[scale,background-color,color,border-color] duration-250 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 motion-reduce:transition-none',
     {
-      'border-primary bg-primary text-primary-content font-semibold': on,
-      'border-base-300 text-base-content/80 hover:border-primary/50': !on,
+      'border-primary bg-primary text-primary-content scale-[1.04]': on,
+      'border-glass-edge bg-glass hover:border-primary/50': !on,
     },
   );
+
+const chipClass = (on: boolean) =>
+  cx(choiceClass(on), 'mr-1.5 mb-1.5 inline-flex items-center px-[11px] py-1.5 text-[11.5px] font-semibold');
+
+const SKELETON =
+  'animate-shimmer bg-[linear-gradient(90deg,var(--color-track),var(--color-glass),var(--color-track))] bg-[length:200px_100%]';
 
 interface OptionsSheetProps {
   url: string;
@@ -133,21 +140,10 @@ export default function OptionsSheet({ url, info, defaults, onClose }: Readonly<
     const on = (q?.format_id ?? null) === (quality?.format_id ?? null);
 
     return (
-      <label
-        key={q?.format_id ?? 'audio'}
-        className={cx(
-          'has-focus-visible:outline-primary cursor-pointer rounded-[10px] border px-2.5 py-1.5 has-focus-visible:outline-2',
-          {
-            'border-primary bg-primary/8 border-[1.5px]': on,
-            'border-base-300 hover:border-primary/50': !on,
-          },
-        )}
-      >
+      <label key={q?.format_id ?? 'audio'} className={cx(choiceClass(on), 'px-2.5 py-1.5')}>
         <input type="radio" name="quality" className="sr-only" checked={on} onChange={() => setQuality(q)} />
-        <span className={cx('block text-[12px] font-semibold', { 'text-secondary-content': on })}>
-          {q ? q.label : t.quality.audio}
-        </span>
-        <span className="text-fg-muted block truncate text-[10px]">
+        <span className="block text-[12px] font-semibold">{q ? q.label : t.quality.audio}</span>
+        <span className={cx('block truncate text-[10px]', on ? 'text-primary-content/80' : 'text-muted')}>
           {q ? [q.vcodec, formatBytes(q.filesize)].filter(Boolean).join(' · ') : 'm4a'}
         </span>
       </label>
@@ -175,7 +171,7 @@ export default function OptionsSheet({ url, info, defaults, onClose }: Readonly<
       ref={dialogRef}
       tabIndex={-1}
       aria-label={info?.title ?? t.sheet.loading}
-      className="float-shadow bg-base-100 text-base-content m-auto h-fit max-h-[88vh] w-[min(380px,92vw)] max-w-none overflow-y-auto rounded-[18px] p-0 outline-none backdrop:bg-black/30"
+      className="glass float-shadow text-base-content animate-sheet-up backdrop:bg-scrim fixed inset-x-2.5 top-auto bottom-2.5 m-0 h-fit max-h-[calc(100%-20px)] w-auto max-w-none overflow-y-auto rounded-[20px] p-4 outline-none backdrop:backdrop-blur-[3px]"
       onCompositionStart={() => (composing.current = true)}
       onCompositionEnd={() => (composing.current = false)}
       onCancel={(e) => {
@@ -187,97 +183,96 @@ export default function OptionsSheet({ url, info, defaults, onClose }: Readonly<
       onClick={(e) => e.target === dialogRef.current && onClose()}
     >
       {!info ? (
-        <div>
-          <div className="bg-base-200 h-[110px] animate-pulse" />
-          <div className="flex items-center gap-3 p-4 text-sm">
-            <span className="loading loading-spinner loading-sm" />
-            {t.sheet.loading}
+        <div role="status" className="flex items-center gap-2.5">
+          <div className={cx(SKELETON, 'h-[50px] w-[88px] shrink-0 rounded-[10px]')} />
+          <div className="min-w-0 flex-1">
+            <div className={cx(SKELETON, 'h-3 w-4/5 rounded-md')} />
+            <div className={cx(SKELETON, 'mt-1.5 h-3 w-2/5 rounded-md')} />
           </div>
+          <span className="sr-only">{t.sheet.loading}</span>
         </div>
       ) : (
         <>
-          <div className="from-primary to-secondary relative h-[110px] bg-gradient-to-br">
-            {info.thumbnail && (
-              <img src={info.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="flex items-center gap-2.5">
+            {info.thumbnail ? (
+              <img src={info.thumbnail} alt="" className="h-[50px] w-[88px] shrink-0 rounded-[10px] object-cover" />
+            ) : (
+              <div className="h-[50px] w-[88px] shrink-0 rounded-[10px] bg-(image:--gradient-progress)" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent from-30% to-black/75" />
-            {info.duration_secs != null && (
-              <span className="absolute top-2.5 right-2.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
-                {formatDuration(info.duration_secs)}
-              </span>
-            )}
-            <div className="absolute right-3.5 bottom-2.5 left-3.5 text-white">
-              <div className="truncate text-[13.5px] font-semibold">{info.title}</div>
-              {info.channel && <div className="truncate text-[11px] opacity-80">{info.channel}</div>}
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold">{info.title}</div>
+              <div className="text-muted mt-0.5 truncate text-[11px] tabular-nums">
+                {[info.channel, info.duration_secs != null && formatDuration(info.duration_secs)]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
             </div>
           </div>
 
-          <div className="px-4 pt-0.5 pb-4">
-            <Section label={t.sheet.quality}>
-              <div role="radiogroup" aria-label={t.sheet.quality} className="grid grid-cols-3 gap-1.5">
-                {info.qualities.map(qualityTile)}
-                {qualityTile(null)}
-              </div>
-            </Section>
-
-            <Section label={t.sheet.format}>
-              <div ref={presetGroupRef} role="radiogroup" aria-label={t.sheet.format}>
-                {(allPresets ? PRESETS : visiblePresets(defaults.preset)).map(presetChip)}
-                {!allPresets && (
-                  <button type="button" className={chipClass(false)} onClick={handleShowAllPresets}>
-                    {t.sheet.more} ▾
-                  </button>
-                )}
-              </div>
-            </Section>
-
-            <Section label={t.sheet.subtitles}>
-              {info.subtitles.length === 0 && autoOnly.length === 0 && (
-                <div className="text-fg-muted text-xs">{t.sheet.noSubs}</div>
-              )}
-              <div>{info.subtitles.map(subChip)}</div>
-              {autoOnly.length > 0 && (
-                <details className="mt-1">
-                  <summary className="text-fg-muted cursor-pointer text-[11px]">
-                    {t.sheet.autoSubs} ({autoOnly.length})
-                  </summary>
-                  <div className="mt-1.5 max-h-32 overflow-y-auto">{autoOnly.map(subChip)}</div>
-                </details>
-              )}
-            </Section>
-
-            {error && (
-              <div role="alert" className="alert alert-error mt-3 py-2 text-sm">
-                <div>
-                  <div>{errorMessage(error, t.errors)}</div>
-                  {detail && <div className="text-xs opacity-80">{detail}</div>}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4 flex items-center gap-2">
-              <label className="text-base-content/80 flex flex-1 items-center gap-2 text-[11.5px]">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm checkbox-primary"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                />
-                {t.sheet.remember}
-              </label>
-              <button className="btn btn-sm" onClick={onClose}>
-                {t.sheet.cancel}
-              </button>
-              <button
-                ref={downloadRef}
-                autoFocus
-                className="btn btn-primary btn-sm"
-                onClick={handleConfirm}
-                disabled={adding}
-              >
-                {t.sheet.download}
-              </button>
+          <Section label={t.sheet.quality}>
+            <div role="radiogroup" aria-label={t.sheet.quality} className="grid grid-cols-3 gap-1.5">
+              {info.qualities.map(qualityTile)}
+              {qualityTile(null)}
             </div>
+          </Section>
+
+          <Section label={t.sheet.format}>
+            <div ref={presetGroupRef} role="radiogroup" aria-label={t.sheet.format}>
+              {(allPresets ? PRESETS : visiblePresets(defaults.preset)).map(presetChip)}
+              {!allPresets && (
+                <button type="button" className={chipClass(false)} onClick={handleShowAllPresets}>
+                  {t.sheet.more} ▾
+                </button>
+              )}
+            </div>
+          </Section>
+
+          <Section label={t.sheet.subtitles}>
+            {info.subtitles.length === 0 && autoOnly.length === 0 && (
+              <div className="text-muted text-xs">{t.sheet.noSubs}</div>
+            )}
+            <div>{info.subtitles.map(subChip)}</div>
+            {autoOnly.length > 0 && (
+              <details className="mt-1">
+                <summary className="text-muted cursor-pointer text-[11px]">
+                  {t.sheet.autoSubs} ({autoOnly.length})
+                </summary>
+                <div className="mt-1.5 max-h-32 overflow-y-auto">{autoOnly.map(subChip)}</div>
+              </details>
+            )}
+          </Section>
+
+          {error && (
+            <div role="alert" className="alert alert-error mt-3 py-2 text-sm">
+              <div>
+                <div>{errorMessage(error, t.errors)}</div>
+                {detail && <div className="text-xs opacity-80">{detail}</div>}
+              </div>
+            </div>
+          )}
+
+          <label className="text-base-content/80 mt-3.5 flex items-center gap-2 text-[11.5px]">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm checkbox-primary"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            {t.sheet.remember}
+          </label>
+          <div className="mt-3 flex items-center gap-2">
+            <button className="btn btn-ghost h-10 rounded-xl" onClick={onClose}>
+              {t.sheet.cancel}
+            </button>
+            <button
+              ref={downloadRef}
+              autoFocus
+              className="text-primary-content focus-visible:outline-primary h-10 flex-1 cursor-pointer rounded-xl bg-(image:--gradient-progress) text-[13px] font-bold transition-transform duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-96 disabled:cursor-default disabled:opacity-60 motion-reduce:transition-none"
+              onClick={handleConfirm}
+              disabled={adding}
+            >
+              {t.sheet.download}
+            </button>
           </div>
         </>
       )}

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
-import DropZone from '@/app/_components/DropZone';
 import { probe } from '@/domain/queue/apis/queue';
 import type { VideoInfo } from '@/domain/queue/apis/queue.dto';
+import EmptyState from '@/domain/queue/components/EmptyState';
 import JobRow from '@/domain/queue/components/JobRow';
 import OptionsSheet from '@/domain/queue/components/OptionsSheet';
 import { useCompletedClear, useJobs, useUrlAdd } from '@/domain/queue/queries/queue';
@@ -23,6 +23,9 @@ import { toolsToast } from '@/utils/tools';
 
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
+const HEADER_BUTTON =
+  'glass text-muted hover:text-base-content focus-visible:outline-primary grid h-7 w-7 cursor-pointer place-items-center rounded-[9px] focus-visible:outline-2';
+
 interface SheetState {
   url: string;
   info: VideoInfo | null;
@@ -31,18 +34,15 @@ interface SheetState {
 /** The `main` window: paste a link, pick options, watch the queue. */
 export default function App() {
   // ref
-  // While a sheet is open, ⌘V and drops are ignored (an open sheet is never replaced).
+  // While a sheet is open, ⌘V is ignored (an open sheet is never replaced).
   // Read through a ref so the keydown listener never sees a stale value.
   const sheetUrl = useRef<string | null>(null);
   // A second paste before the first (readText · addUrl) finished is dropped (no duplicate jobs).
   const inFlight = useRef(false);
-  // WebKit sometimes clears dragleave's relatedTarget, so crossing a child toggles the highlight.
-  // Count enters and switch off only when the pointer has left the window.
-  const dragDepth = useRef(0);
 
   // state
   const [sheet, setSheet] = useState<SheetState | null>(null);
-  const [dragging, setDragging] = useState(false);
+  const [pressCount, setPressCount] = useState(0);
 
   // store
   const showError = useStore((s) => s.showError);
@@ -118,7 +118,7 @@ export default function App() {
   // handle
   const handleOpenSettings = () => void openSettings().catch((e: AppError) => showError(e));
 
-  const handleSubmit = async (source: string | null | Promise<string | null>) => {
+  const handleSubmit = async (source: Promise<string | null>) => {
     if (inFlight.current) {
       return;
     }
@@ -139,7 +139,7 @@ export default function App() {
         return;
       }
       setSheet({ url, info: null });
-      sheetUrl.current = url; // block ⌘V and drops before the next render
+      sheetUrl.current = url; // block ⌘V before the next render
     } finally {
       // While probing, the open sheet blocks re-entry. Cancelling the sheet allows a new paste at once;
       // a late probe result is filtered by the url check below. The probe stays outside this guard
@@ -159,48 +159,30 @@ export default function App() {
     }
   };
 
-  // ⌘V and a click on the drop zone. Ignored while a sheet is open.
+  // ⌘V. Ignored while a sheet is open.
   const handlePaste = () => {
     if (sheetUrl.current !== null) {
       return;
     }
+    setPressCount((n) => n + 1);
     void handleSubmit(readText().catch(() => null));
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    dragDepth.current = 0;
-    setDragging(false);
-    if (sheetUrl.current !== null) {
-      return;
-    }
-    void handleSubmit(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain'));
-  };
-
   return (
-    <div
-      className="flex h-full flex-col"
-      onDragOver={(e) => e.preventDefault()}
-      onDragEnter={() => {
-        dragDepth.current += 1;
-        setDragging(true);
-      }}
-      onDragLeave={() => {
-        dragDepth.current = Math.max(0, dragDepth.current - 1);
-        if (dragDepth.current === 0) {
-          setDragging(false);
-        }
-      }}
-      onDrop={handleDrop}
-    >
-      <header className="flex h-[42px] shrink-0 items-center gap-1 px-4">
-        <span className="text-[15px] font-extrabold tracking-[-0.5px]">
+    <div className="relative flex h-full flex-col">
+      <div className="aurora" aria-hidden="true">
+        <span className="aurora-blob" />
+        <span className="aurora-blob" />
+        <span className="aurora-blob" />
+      </div>
+      <header className="relative flex h-[46px] shrink-0 items-center gap-1.5 px-4">
+        <span className="text-[17px] font-extrabold tracking-[-0.5px]">
           kiri<span className="text-primary">.</span>
         </span>
         <span className="flex-1" />
         {jobs.some((j) => j.state.kind === 'completed') && (
           <button
-            className="btn btn-ghost btn-sm btn-square"
+            className={HEADER_BUTTON}
             aria-label={t.app.clearCompleted}
             title={t.app.clearCompleted}
             onClick={() => clearCompleted()}
@@ -209,24 +191,20 @@ export default function App() {
           </button>
         )}
         <button
-          className="btn btn-ghost btn-sm btn-square"
+          className={`group ${HEADER_BUTTON}`}
           aria-label={t.app.settings}
           title={t.app.settings}
           onClick={handleOpenSettings}
         >
-          <Icon name="settings" className="h-4 w-4" />
+          <Icon
+            name="settings"
+            className="h-4 w-4 transition-transform duration-300 motion-safe:group-hover:rotate-45 motion-reduce:transition-none"
+          />
         </button>
       </header>
-      <DropZone dragging={dragging} onClick={handlePaste} />
-      <main className="flex-1 overflow-y-auto pb-1.5">
+      <main className="relative flex-1 overflow-y-auto pt-1 pb-1.5">
         {jobs.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center">
-            <span className="bg-base-200 text-fg-muted mb-1 grid h-10 w-10 place-items-center rounded-xl">
-              <Icon name="download" />
-            </span>
-            <span className="text-sm font-semibold">{t.app.empty}</span>
-            <span className="text-fg-muted text-xs">{t.app.emptyDesc}</span>
-          </div>
+          <EmptyState pressCount={pressCount} />
         ) : (
           [...jobs].reverse().map((j) => <JobRow key={j.id} job={j} />)
         )}

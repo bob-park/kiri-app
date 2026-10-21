@@ -26,7 +26,7 @@ function ToastCard({ toast, onDismiss }: Readonly<ToastCardProps>) {
     <div
       role={toast.leaving ? undefined : toast.kind === 'progress' ? 'status' : 'alert'}
       aria-hidden={toast.leaving || undefined}
-      className={cx('float-shadow bg-toast text-toast-content rounded-xl px-3 py-2.5 text-[12px]', {
+      className={cx('glass float-shadow text-base-content rounded-xl px-3 py-2.5 text-[12px]', {
         'animate-toast-out pointer-events-none': toast.leaving,
         'animate-toast-in': !toast.leaving,
         'cursor-pointer': clickToClose,
@@ -65,7 +65,7 @@ function ToastCard({ toast, onDismiss }: Readonly<ToastCardProps>) {
       </div>
       {toast.kind === 'progress' && (
         <progress
-          className="progress progress-primary mt-2 h-1 w-full"
+          className="progress progress-primary bg-track mt-2 h-1 w-full"
           aria-label={toast.text}
           value={toast.progress == null ? undefined : toast.progress * 100}
           max={100}

@@ -37,7 +37,7 @@ export default function ErrorAlert() {
   return (
     <div
       role="alert"
-      className="animate-toast-in float-shadow bg-toast text-toast-content rounded-xl px-3 py-2.5 text-[12px]"
+      className="animate-toast-in glass float-shadow text-base-content rounded-xl px-3 py-2.5 text-[12px]"
     >
       <div className="flex items-start gap-2">
         <span className="bg-error mt-[5px] h-2 w-2 shrink-0 rounded-full" />

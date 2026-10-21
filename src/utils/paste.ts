@@ -1,4 +1,4 @@
-/** The first http(s) URL in pasted or dropped text. The backend decides whether it is YouTube. */
+/** The first http(s) URL in pasted text. The backend decides whether it is YouTube. */
 export function extractUrl(text: string | null | undefined): string | null {
   const m = text?.match(/https?:\/\/\S+/);
 
