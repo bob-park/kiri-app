@@ -3,8 +3,9 @@ use kiri_core::{
     engine::{Engine, EngineConfig, EnginePaths},
     ipc,
     model::{Preset, Tools},
+    queue::JsonQueueStore,
 };
-use std::{path::Path, process::Command};
+use std::{path::Path, process::Command, sync::Arc};
 
 fn idle_engine(dir: &Path) -> Engine {
     let tools = Tools {
@@ -14,7 +15,9 @@ fn idle_engine(dir: &Path) -> Engine {
         ffprobe: dir.join("none/ffprobe"),
     };
     let paths = EnginePaths {
-        queue_file: dir.join("q.json"),
+        store: Arc::new(JsonQueueStore {
+            path: dir.join("q.json"),
+        }),
         cache_dir: dir.join("c"),
         log_dir: dir.join("l"),
     };
@@ -94,7 +97,9 @@ fn engine_with_ffprobe(dir: &Path) -> Engine {
         ffprobe,
     };
     let paths = EnginePaths {
-        queue_file: dir.join("q.json"),
+        store: Arc::new(JsonQueueStore {
+            path: dir.join("q.json"),
+        }),
         cache_dir: dir.join("c"),
         log_dir: dir.join("l"),
     };

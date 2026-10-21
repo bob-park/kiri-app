@@ -2,11 +2,7 @@ use crate::{
     bootstrap::{self, ToolsState, ToolsStatus},
     cli_install::{self, CliStatus},
 };
-use kiri_core::{
-    engine::{Engine, EngineError},
-    model::{Job, NewJob},
-    ytdlp::VideoInfo,
-};
+use kiri_core::engine::EngineError;
 use serde::Serialize;
 use std::path::Path;
 use tauri::{AppHandle, State};
@@ -37,47 +33,6 @@ impl From<String> for CmdError {
 }
 
 pub type CmdResult<T> = Result<T, CmdError>;
-
-#[tauri::command]
-pub fn list_jobs(engine: State<'_, Engine>) -> Vec<Job> {
-    engine.list()
-}
-
-#[tauri::command]
-pub async fn probe(engine: State<'_, Engine>, url: String) -> CmdResult<VideoInfo> {
-    Ok(engine.probe(&url).await?)
-}
-
-#[tauri::command]
-pub fn add_job(engine: State<'_, Engine>, job: NewJob) -> CmdResult<Job> {
-    Ok(engine.add(job)?)
-}
-
-/// 시트 없이 설정 기본값으로 바로 추가.
-#[tauri::command]
-pub async fn add_url(engine: State<'_, Engine>, url: String) -> CmdResult<Job> {
-    Ok(engine.add_url(&url, None, None, None).await?)
-}
-
-#[tauri::command]
-pub fn stop_job(engine: State<'_, Engine>, id: u64) -> CmdResult<()> {
-    Ok(engine.stop(id)?)
-}
-
-#[tauri::command]
-pub fn remove_job(engine: State<'_, Engine>, id: u64) -> CmdResult<()> {
-    Ok(engine.remove(id)?)
-}
-
-#[tauri::command]
-pub fn clear_completed(engine: State<'_, Engine>) -> usize {
-    engine.clear_completed()
-}
-
-#[tauri::command]
-pub fn restart_job(engine: State<'_, Engine>, id: u64) -> CmdResult<()> {
-    Ok(engine.restart(id)?)
-}
 
 #[tauri::command]
 pub fn tools_status(state: State<'_, ToolsState>) -> ToolsStatus {

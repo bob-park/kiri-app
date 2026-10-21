@@ -15,7 +15,8 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("database schema version {found} is newer than supported version {supported}")]
     SchemaTooNew { found: i64, supported: i64 },
-    #[allow(dead_code)] // ponytail: first used by the queue domain (Task 4); drop the allow then
+    #[allow(dead_code)]
+    // ponytail: no domain needs it yet (engine misses are Engine(NotFound)); drop the allow at first use
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
@@ -74,7 +75,10 @@ mod tests {
     #[test]
     fn serializes_code_and_message() {
         let v = serde_json::to_value(AppError::InvalidInput("x".into())).unwrap();
-        assert_eq!(v, serde_json::json!({ "code": "INVALID_INPUT", "message": "x" }));
+        assert_eq!(
+            v,
+            serde_json::json!({ "code": "INVALID_INPUT", "message": "x" })
+        );
     }
 
     #[test]

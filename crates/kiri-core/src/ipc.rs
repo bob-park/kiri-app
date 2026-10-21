@@ -233,7 +233,9 @@ mod tests {
             ffprobe: dir.join("none/ffprobe"),
         };
         let paths = EnginePaths {
-            queue_file: dir.join("q.json"),
+            store: std::sync::Arc::new(crate::queue::JsonQueueStore {
+                path: dir.join("q.json"),
+            }),
             cache_dir: dir.join("c"),
             log_dir: dir.join("l"),
         };

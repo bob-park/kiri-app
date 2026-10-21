@@ -1,7 +1,34 @@
 //! 큐의 순수 상태. 동시성·프로세스는 engine 이 맡고, 여기는 목록과 파일만 다룬다.
 use crate::model::{Job, JobState, NewJob};
 use serde::{Deserialize, Serialize};
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+/// Where the engine persists the queue. `save` is called while the engine holds its
+/// state lock, so an implementation must never call back into the engine.
+pub trait QueueStore: Send + Sync {
+    /// The second value says whether the stored queue can be trusted (intact or not
+    /// there yet). The engine only cleans up orphan packages when it is true.
+    fn load(&self) -> (QueueState, bool);
+    fn save(&self, state: &QueueState) -> io::Result<()>;
+}
+
+/// The pre-SQLite `queue.json` store. Kept for tests and the one-time import.
+pub struct JsonQueueStore {
+    pub path: PathBuf,
+}
+
+impl QueueStore for JsonQueueStore {
+    fn load(&self) -> (QueueState, bool) {
+        QueueState::load_checked(&self.path)
+    }
+
+    fn save(&self, state: &QueueState) -> io::Result<()> {
+        state.save(&self.path)
+    }
+}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
@@ -108,10 +135,14 @@ impl QueueState {
                 (QueueState::default(), missing)
             }
         };
-        // 손상된 next_id 보정. 빈 목록이면 0 그대로 두고 add 가 1 부터 센다.
-        let min_next = q.jobs.iter().map(|j| j.id + 1).max().unwrap_or(0);
-        q.next_id = q.next_id.max(min_next);
+        q.repair_next_id();
         (q, trusted)
+    }
+
+    /// 손상된 next_id 보정. 빈 목록이면 0 그대로 두고 add 가 1 부터 센다.
+    pub fn repair_next_id(&mut self) {
+        let min_next = self.jobs.iter().map(|j| j.id + 1).max().unwrap_or(0);
+        self.next_id = self.next_id.max(min_next);
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {

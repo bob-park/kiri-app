@@ -67,7 +67,7 @@ export function errorText(e: unknown, t: T = (k, o) => i18next.t(k, o) as string
   if (typeof e === "object" && e !== null && "code" in e) {
     const { code, message } = e as { code: string; message?: string };
     if (code === "unknown" && message) return message;
-    return t(`error.${code}`, { defaultValue: message || t("error.unknown") });
+    return t(`error.${code.toLowerCase()}`, { defaultValue: message || t("error.unknown") });
   }
   const msg = e instanceof Error ? e.message : String(e);
   return msg.startsWith("error.") ? t(msg, { defaultValue: msg }) : msg;

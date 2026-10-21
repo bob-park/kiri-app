@@ -30,7 +30,7 @@ export const useQueue = create<QueueStore>((set) => ({
   jobs: [],
   bind: () => {
     api.listJobs().then((jobs) => set({ jobs })).catch(showError);
-    const p = listen<Job[]>("queue-changed", (e) => set({ jobs: e.payload }));
+    const p = listen<Job[]>("queue://changed", (e) => set({ jobs: e.payload }));
     return () => {
       p.then((un) => un());
     };

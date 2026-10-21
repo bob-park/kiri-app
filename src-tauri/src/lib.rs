@@ -14,7 +14,7 @@ mod updater;
 mod windows;
 
 use app::state::AppState;
-use domain::settings;
+use domain::{queue, settings};
 use kiri_core::{
     engine::{Engine, EnginePaths},
     model::{Job, Tools},
@@ -36,7 +36,7 @@ pub(crate) fn sidecar(name: &str) -> PathBuf {
 /// 엔진이 직렬로 부른다. 여기서 Engine 의 변경 메서드를 부르면 교착하므로
 /// emit 과 (메인 스레드를 기다리지 않는) 트레이 갱신만 한다.
 fn on_queue_change(app: &AppHandle, jobs: &[Job]) {
-    let _ = app.emit("queue-changed", jobs);
+    let _ = app.emit(queue::commands::QUEUE_CHANGED, jobs);
     tray::relabel_queue(app, jobs);
     updater::on_queue_change(app, jobs);
 }
@@ -59,9 +59,24 @@ pub fn run() {
                 Ok(false) => {}
                 Err(e) => log::error!("settings.json import failed: {e}"),
             }
-            app.manage(AppState {
-                db: Arc::new(Mutex::new(conn)),
-            });
+            // A failed import keeps queue.json (or queue.json.bad) and makes the engine's
+            // first load untrusted, so it leaves partial downloads alone.
+            let import_ok =
+                match queue::import_json(&conn, &path.app_local_data_dir()?.join("queue.json")) {
+                    Ok(imported) => {
+                        if imported {
+                            log::info!("imported queue.json into the database");
+                        }
+                        true
+                    }
+                    Err(e) => {
+                        log::error!("queue.json import failed: {e}");
+                        false
+                    }
+                };
+            let db = Arc::new(Mutex::new(conn));
+            let store = Arc::new(queue::SqliteQueueStore::new(db.clone(), import_ok));
+            app.manage(AppState { db });
             app.manage(bootstrap::ToolsState::default());
             app.manage(ipc_server::IpcState::default());
             app.manage(updater::UpdateState::default());
@@ -74,7 +89,7 @@ pub fn run() {
                 ffprobe: sidecar("ffprobe"),
             };
             let paths = EnginePaths {
-                queue_file: path.app_local_data_dir()?.join("queue.json"),
+                store,
                 cache_dir: path.app_cache_dir()?,
                 log_dir: path.app_log_dir()?.join("jobs"),
             };
@@ -98,14 +113,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             settings::commands::get_settings,
             settings::commands::patch_settings,
-            commands::list_jobs,
-            commands::probe,
-            commands::add_job,
-            commands::add_url,
-            commands::stop_job,
-            commands::remove_job,
-            commands::restart_job,
-            commands::clear_completed,
+            queue::commands::list_jobs,
+            queue::commands::probe,
+            queue::commands::add_job,
+            queue::commands::add_url,
+            queue::commands::stop_job,
+            queue::commands::remove_job,
+            queue::commands::restart_job,
+            queue::commands::clear_completed,
             commands::tools_status,
             commands::update_tools,
             commands::update_status,

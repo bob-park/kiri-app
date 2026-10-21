@@ -3,7 +3,7 @@ use crate::{
     files,
     model::{Job, JobOptions, JobSource, JobState, NewJob, Preset, Tools},
     pipeline::{self, PipelineCfg, PipelineError, Report, Stage},
-    queue::QueueState,
+    queue::{QueueState, QueueStore},
     runner,
     ytdlp::{self, VideoInfo},
 };
@@ -30,9 +30,9 @@ pub struct EngineConfig {
     pub default_subtitles: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct EnginePaths {
-    pub queue_file: PathBuf,
+    pub store: Arc<dyn QueueStore>,
     pub cache_dir: PathBuf,
     pub log_dir: PathBuf,
 }
@@ -117,7 +117,7 @@ impl Engine {
         rt: Handle,
         listener: impl Fn(&[Job]) + Send + Sync + 'static,
     ) -> Engine {
-        let (mut state, trusted) = QueueState::load_checked(&paths.queue_file);
+        let (mut state, trusted) = paths.store.load();
         state.recover();
         // 예전 버전의 작업 캐시. 받던 작업은 처음부터 다시 받는다.
         let _ = std::fs::remove_dir_all(paths.cache_dir.join("jobs"));
@@ -459,7 +459,7 @@ impl Engine {
 
     fn save(&self) {
         let st = self.0.state.lock().unwrap();
-        if let Err(e) = st.save(&self.0.paths.queue_file) {
+        if let Err(e) = self.0.paths.store.save(&st) {
             eprintln!("kiri queue: save failed: {e}");
         }
     }
@@ -616,6 +616,7 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::queue::JsonQueueStore;
     use crate::testutil::{self, *};
     use std::{fs, path::Path, time::Duration};
 
@@ -640,7 +641,9 @@ mod tests {
         fs::create_dir_all(&bin).unwrap();
         let tools = testutil::tools(&bin, &ytdlp_with_probe(ytdlp_body), FAKE_FFMPEG);
         let paths = EnginePaths {
-            queue_file: dir.join("data/queue.json"),
+            store: Arc::new(JsonQueueStore {
+                path: dir.join("data/queue.json"),
+            }),
             cache_dir: dir.join("cache"),
             log_dir: dir.join("logs"),
         };
