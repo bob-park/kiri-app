@@ -37,6 +37,8 @@ pub struct Report {
     pub progress: f32,
     pub speed: Option<String>,
     pub eta: Option<String>,
+    /// Set once, on the report emitted right after the download is saved to the save folder.
+    pub original: Option<PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -102,11 +104,55 @@ async fn download_and_save(
     cancel: &CancellationToken,
     report: &mut impl FnMut(Report),
 ) -> Result<PathBuf, PipelineError> {
+    // The original is saved to the save folder as soon as it is downloaded, so the user can play it
+    // while it converts. A restart converts from it again instead of downloading.
+    let original = match job.original.as_deref().filter(|p| p.exists()) {
+        Some(p) => p.to_path_buf(),
+        None => {
+            let original = download(job, url, cfg, cancel, report).await?;
+            report(Report {
+                stage: Stage::Downloading,
+                progress: 1.0,
+                speed: None,
+                eta: None,
+                original: Some(original.clone()),
+            });
+            original
+        }
+    };
+    // On restart drop the earlier partial output (ffmpeg cannot resume encoding).
+    let _ = fs::remove_dir_all(cfg.work_dir.join("out"));
+    let Some(encoded) = encode(job, cfg, cancel, &original, report).await? else {
+        return Ok(original);
+    };
+    // The encoded file keeps the original's final stem, so `-n` follows any " (n)" the original got.
+    let stem = original
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("video");
+    let ext = encoded
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4");
+    let dest = files::variant_path(&cfg.download_dir, stem, ext);
+    files::move_file(&encoded, &dest).map_err(io_fail)?;
+    Ok(dest)
+}
+
+/// Downloads into the work folder, then moves the media and subtitles to the save folder.
+async fn download(
+    job: &Job,
+    url: &str,
+    cfg: &PipelineCfg,
+    cancel: &CancellationToken,
+    report: &mut impl FnMut(Report),
+) -> Result<PathBuf, PipelineError> {
     report(Report {
         stage: Stage::Downloading,
         progress: 0.0,
         speed: None,
         eta: None,
+        original: None,
     });
     let args = ytdlp::download_args(url, &job.options, &cfg.tools, &cfg.work_dir);
     let mut tracker = ytdlp::ProgressTracker::new(ytdlp::expected_streams(&job.options));
@@ -117,6 +163,7 @@ async fn download_and_save(
                 progress: p.fraction,
                 speed: p.speed,
                 eta: p.eta,
+                original: None,
             });
         }
     })
@@ -126,24 +173,7 @@ async fn download_and_save(
     let downloaded = files::find_media(&cfg.work_dir)
         .map_err(io_fail)?
         .ok_or_else(|| PipelineError::Failed(ERR_NO_OUTPUT.into()))?;
-    match encode(job, cfg, cancel, &downloaded, report).await? {
-        None => finalize(cfg, &downloaded),
-        Some(encoded) => {
-            // Move the original (and subtitles) to the save folder first, then name the converted file after its final name.
-            let original = finalize(cfg, &downloaded)?;
-            let stem = original
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("video");
-            let ext = encoded
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("mp4");
-            let dest = files::variant_path(&cfg.download_dir, stem, ext);
-            files::move_file(&encoded, &dest).map_err(io_fail)?;
-            Ok(dest)
-        }
-    }
+    finalize(cfg, &downloaded)
 }
 
 /// Local conversion: the source is only read; the result goes to the output folder as `{source}-{n}.{ext}`.
@@ -203,6 +233,7 @@ async fn encode(
         progress: 0.0,
         speed: None,
         eta: None,
+        original: None,
     });
     match encode_once(job, cfg, cancel, input, &output, hw, report).await {
         Err(e @ RunError::Failed { .. }) if hw => {
@@ -246,6 +277,7 @@ async fn encode_once(
                 progress: p,
                 speed: None,
                 eta: None,
+                original: None,
             });
         }
     })
@@ -308,12 +340,91 @@ mod tests {
     }
 
     async fn go(e: &Env, preset: Preset) -> (Result<PathBuf, PipelineError>, Vec<Report>) {
+        go_job(e, &job(preset)).await
+    }
+
+    async fn go_job(e: &Env, j: &Job) -> (Result<PathBuf, PipelineError>, Vec<Report>) {
         let mut reports = vec![];
-        let r = run(&job(preset), &e.cfg, &CancellationToken::new(), |r| {
-            reports.push(r)
-        })
-        .await;
+        let r = run(j, &e.cfg, &CancellationToken::new(), |r| reports.push(r)).await;
         (r, reports)
+    }
+
+    fn reported_original(reports: &[Report]) -> Vec<PathBuf> {
+        reports.iter().filter_map(|r| r.original.clone()).collect()
+    }
+
+    #[tokio::test]
+    async fn original_is_in_download_dir_before_encoding_starts() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, false);
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        // ffmpeg fails unless the saved original exists and is the input it was given.
+        let body = format!(
+            "DOWNLOAD_DIR='{}'\n\
+             [ -f \"$DOWNLOAD_DIR/Fake Video.mp4\" ] || exit 1\n\
+             case \"$*\" in *\"-i $DOWNLOAD_DIR/Fake Video.mp4 \"*) ;; *) exit 1;; esac\n{FAKE_FFMPEG}",
+            e.cfg.download_dir.display()
+        );
+        testutil::script(e.cfg.tools.ffmpeg.parent().unwrap(), "ffmpeg", &body);
+        let (r, reports) = go(&e, Preset::Mp4H264).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
+        assert_eq!(reported_original(&reports), vec![original.clone()]);
+        assert!(original.exists());
+        assert!(e.cfg.download_dir.join("Fake Video.ko.srt").exists());
+    }
+
+    #[tokio::test]
+    async fn encode_failure_keeps_saved_original() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, "echo 'Error: boom' >&2; exit 1", true);
+        let (r, reports) = go(&e, Preset::Mp4H264).await;
+        assert_eq!(r, Err(PipelineError::Failed("Error: boom".into())));
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        assert!(
+            original.exists(),
+            "original must survive a failed conversion"
+        );
+        assert_eq!(reported_original(&reports), vec![original]);
+    }
+
+    #[tokio::test]
+    async fn resume_with_saved_original_skips_download() {
+        let e = env("exit 1", FAKE_FFMPEG, true);
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(&original, "orig").unwrap();
+        let mut j = job(Preset::Mp4H264);
+        j.original = Some(original.clone());
+        let (r, reports) = go_job(&e, &j).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
+        assert_eq!(fs::read_to_string(&original).unwrap(), "orig");
+        assert!(reports.iter().all(|r| r.stage == Stage::Encoding));
+    }
+
+    #[tokio::test]
+    async fn missing_saved_original_redownloads() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        let mut j = job(Preset::Mp4H264);
+        j.original = Some(e.cfg.download_dir.join("gone.mp4"));
+        let (r, reports) = go_job(&e, &j).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video-1.mp4"));
+        let original = e.cfg.download_dir.join("Fake Video.mp4");
+        assert!(original.exists());
+        assert_eq!(reported_original(&reports), vec![original]);
+    }
+
+    #[tokio::test]
+    async fn collision_names_variant_after_final_original() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, true);
+        fs::create_dir_all(&e.cfg.download_dir).unwrap();
+        fs::write(e.cfg.download_dir.join("Fake Video.mp4"), "old").unwrap();
+        let (r, reports) = go(&e, Preset::MovProres).await;
+        assert_eq!(r.unwrap(), e.cfg.download_dir.join("Fake Video (1)-1.mov"));
+        let original = e.cfg.download_dir.join("Fake Video (1).mp4");
+        assert!(original.exists());
+        assert_eq!(reported_original(&reports), vec![original]);
+        assert_eq!(
+            fs::read_to_string(e.cfg.download_dir.join("Fake Video.mp4")).unwrap(),
+            "old"
+        );
     }
 
     #[tokio::test]

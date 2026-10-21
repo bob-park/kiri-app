@@ -259,6 +259,7 @@ mod tests {
             eta: Some("00:12".into()),
             output: None,
             work_dir: None,
+            original: None,
             created_at: 0,
         }
     }

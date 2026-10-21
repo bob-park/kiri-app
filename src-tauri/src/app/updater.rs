@@ -335,6 +335,7 @@ mod tests {
             eta: None,
             output: None,
             work_dir: None,
+            original: None,
             created_at: 0,
         }
     }

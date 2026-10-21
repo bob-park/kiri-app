@@ -552,24 +552,33 @@ impl Engine {
     }
 
     fn on_report(&self, id: u64, r: Report) {
-        let stage_changed = {
+        let needs_save = {
             let mut st = self.0.state.lock().unwrap();
             let Some(job) = st.get_mut(id) else { return };
-            if !job.state.is_active() {
-                return; // already stopped or removed
+            // Record the saved original even if the job was just stopped, so a restart reuses it.
+            let saved_original = r.original.is_some();
+            if saved_original {
+                job.original = r.original;
             }
-            let next = match r.stage {
-                Stage::Downloading => JobState::Downloading,
-                Stage::Encoding => JobState::Encoding,
-            };
-            let changed = job.state != next;
-            job.state = next;
-            job.progress = r.progress;
-            job.speed = r.speed;
-            job.eta = r.eta;
-            changed
+            if !job.state.is_active() {
+                if !saved_original {
+                    return; // already stopped or removed
+                }
+                true
+            } else {
+                let next = match r.stage {
+                    Stage::Downloading => JobState::Downloading,
+                    Stage::Encoding => JobState::Encoding,
+                };
+                let changed = job.state != next;
+                job.state = next;
+                job.progress = r.progress;
+                job.speed = r.speed;
+                job.eta = r.eta;
+                changed || saved_original
+            }
         };
-        if stage_changed {
+        if needs_save {
             self.save();
         }
         self.notify();
@@ -628,18 +637,19 @@ mod tests {
     }
 
     fn engine_at(dir: &Path, ytdlp_body: &str, max: usize) -> Engine {
-        engine_with_listener(dir, ytdlp_body, max, |_| {})
+        engine_with_listener(dir, ytdlp_body, FAKE_FFMPEG, max, |_| {})
     }
 
     fn engine_with_listener(
         dir: &Path,
         ytdlp_body: &str,
+        ffmpeg_body: &str,
         max: usize,
         listener: impl Fn(&[Job]) + Send + Sync + 'static,
     ) -> Engine {
         let bin = dir.join("bin");
         fs::create_dir_all(&bin).unwrap();
-        let tools = testutil::tools(&bin, &ytdlp_with_probe(ytdlp_body), FAKE_FFMPEG);
+        let tools = testutil::tools(&bin, &ytdlp_with_probe(ytdlp_body), ffmpeg_body);
         let paths = EnginePaths {
             store: Arc::new(JsonQueueStore {
                 path: dir.join("data/queue.json"),
@@ -880,17 +890,18 @@ mod tests {
         let overlap = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let inside = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let (saw_overlap, counter) = (overlap.clone(), inside.clone());
-        let engine = engine_with_listener(d.path(), FAKE_YTDLP_DOWNLOAD, 2, move |jobs| {
-            use std::sync::atomic::Ordering::SeqCst;
-            // A slow listener (an IPC emit in practice). Without serialization two notifications
-            // overlap and the older snapshot arrives last.
-            if counter.fetch_add(1, SeqCst) > 0 {
-                saw_overlap.store(true, SeqCst);
-            }
-            std::thread::sleep(Duration::from_millis(20));
-            rec.lock().unwrap().push(jobs.to_vec());
-            counter.fetch_sub(1, SeqCst);
-        });
+        let engine =
+            engine_with_listener(d.path(), FAKE_YTDLP_DOWNLOAD, FAKE_FFMPEG, 2, move |jobs| {
+                use std::sync::atomic::Ordering::SeqCst;
+                // A slow listener (an IPC emit in practice). Without serialization two notifications
+                // overlap and the older snapshot arrives last.
+                if counter.fetch_add(1, SeqCst) > 0 {
+                    saw_overlap.store(true, SeqCst);
+                }
+                std::thread::sleep(Duration::from_millis(20));
+                rec.lock().unwrap().push(jobs.to_vec());
+                counter.fetch_sub(1, SeqCst);
+            });
         engine.start();
         engine.add(new_job("a")).unwrap();
         engine.add(new_job("b")).unwrap();
@@ -1099,6 +1110,7 @@ mod tests {
         let j = q.get_mut(1).unwrap();
         j.state = JobState::Failed("x".into());
         j.output = Some("/old.mp4".into());
+        j.original = Some("/orig.mp4".into());
         j.speed = Some("1.0 MB/s".into());
         j.eta = Some("00:01".into());
         q.save(&d.path().join("data/queue.json")).unwrap();
@@ -1108,6 +1120,48 @@ mod tests {
         let j = &engine.list()[0];
         assert_eq!(j.state, JobState::Queued);
         assert_eq!((&j.output, &j.speed, &j.eta), (&None, &None, &None));
+        assert_eq!(j.original.as_deref(), Some(Path::new("/orig.mp4")));
+    }
+
+    /// An MP4 job whose conversion hangs, so tests can act while it is encoding.
+    async fn encoding_env() -> (Env, PathBuf) {
+        let d = tempfile::tempdir().unwrap();
+        let engine = engine_with_listener(d.path(), FAKE_YTDLP_DOWNLOAD, "sleep 30", 1, |_| {});
+        engine.start();
+        let mut nj = new_job("a");
+        nj.options.preset = Preset::Mp4H264;
+        engine.add(nj).unwrap();
+        let original = d.path().join("Movies/kiri/Fake Video.mp4");
+        wait_for(&engine, |j| {
+            j[0].state == JobState::Encoding && j[0].original.is_some()
+        })
+        .await;
+        (Env { d, engine }, original)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn report_original_is_persisted() {
+        let (e, original) = encoding_env().await;
+        assert_eq!(
+            e.engine.list()[0].original.as_deref(),
+            Some(original.as_path())
+        );
+        let saved = QueueState::load(&e.d.path().join("data/queue.json"));
+        assert_eq!(saved.jobs[0].original.as_deref(), Some(original.as_path()));
+        e.engine.stop(1).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remove_while_encoding_keeps_original() {
+        let (e, original) = encoding_env().await;
+        let wd = e.d.path().join("Movies/kiri/a.kiripart");
+        assert!(original.exists() && wd.exists());
+        e.engine.remove(1).unwrap();
+        wait_for(&e.engine, |_| !wd.exists()).await;
+        assert!(
+            original.exists(),
+            "removing a job must never delete the saved original"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

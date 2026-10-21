@@ -10,7 +10,7 @@ import { failureText, formatBytes, formatDuration, jobDetail } from './format.ts
 const t = {
   quality: { audio: 'quality.audio', original: 'quality.original', best: 'quality.best' },
   preset: { 'mp4-h264': 'preset.mp4-h264', mp3: 'preset.mp3' },
-  job: { transcode: 'job.transcode', subs: (langs: string) => `Subs ${langs}` },
+  job: { transcode: 'job.transcode', encodingSaved: 'job.encodingSaved', subs: (langs: string) => `Subs ${langs}` },
   state: { encoding: 'state.encoding' },
   errors: { NO_OUTPUT: 'No file' },
 } as unknown as Dict;
@@ -29,6 +29,7 @@ const job = (state: JobState, extra: Partial<Job> = {}): Job => ({
   eta: '00:12',
   output: null,
   work_dir: null,
+  original: null,
   created_at: 0,
   ...extra,
 });
@@ -59,6 +60,10 @@ void test('describes audio, encoding and failure', () => {
     },
   );
   assert.equal(jobDetail(audio, t), 'quality.audio · preset.mp3 · state.encoding 48%');
+  assert.equal(
+    jobDetail({ ...audio, original: '/m/a.webm' }, t),
+    'quality.audio · preset.mp3 · state.encoding 48% · job.encodingSaved',
+  );
   assert.equal(
     jobDetail(job({ kind: 'failed', message: 'ERROR: private' }), t),
     '1080p60 · preset.mp4-h264 · Subs ko · ERROR: private',

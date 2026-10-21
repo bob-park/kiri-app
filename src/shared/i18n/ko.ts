@@ -21,6 +21,7 @@ export const ko: Dict = {
     reveal: 'Finder에서 보기',
     subs: (langs) => `자막 ${langs}`,
     transcode: '변환',
+    encodingSaved: '원본 저장됨',
   },
   state: {
     queued: '대기',

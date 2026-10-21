@@ -31,6 +31,8 @@ export type Job = {
   eta: string | null;
   output: string | null;
   work_dir: string | null;
+  /** The original saved to the download folder, set as soon as the download finishes. */
+  original: string | null;
   /** Unix ms. */
   created_at: number;
 };

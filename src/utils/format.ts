@@ -67,6 +67,9 @@ export function jobDetail(job: Job, t: Dict): string {
     parts.push([pct(job.progress), job.speed, job.eta].filter(Boolean).join(' · '));
   } else if (s.kind === 'encoding') {
     parts.push(`${t.state.encoding} ${pct(job.progress)}`);
+    if (job.original) {
+      parts.push(t.job.encodingSaved);
+    }
   } else if (s.kind === 'failed') {
     parts.push(failureText(s.message, t.errors));
   }

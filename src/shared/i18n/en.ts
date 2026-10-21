@@ -20,6 +20,7 @@ export const en = {
     reveal: 'Show in Finder',
     subs: (langs: string) => `Subs ${langs}`,
     transcode: 'Transcode',
+    encodingSaved: 'Original saved',
   },
   state: {
     queued: 'Queued',

@@ -19,6 +19,7 @@ const job = (state: JobState): Job => ({
   eta: null,
   output: null,
   work_dir: null,
+  original: null,
   created_at: 0,
 });
 

@@ -72,6 +72,7 @@ impl QueueState {
             eta: None,
             output: None,
             work_dir: None,
+            original: None,
             created_at: now_ms,
         };
         self.jobs.push(job.clone());

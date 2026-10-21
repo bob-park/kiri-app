@@ -147,6 +147,10 @@ pub struct Job {
     /// The `<save folder>/<title>.kiripart` package holding in-progress files. Chosen on first start.
     #[serde(default)]
     pub work_dir: Option<PathBuf>,
+    /// The downloaded original's final path in the save folder, set as soon as the download finishes.
+    /// A restart converts from it instead of downloading again (while it still exists).
+    #[serde(default)]
+    pub original: Option<PathBuf>,
     /// unix epoch milliseconds
     #[serde(default)]
     pub created_at: u64,
