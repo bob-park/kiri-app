@@ -1,10 +1,10 @@
-//! 인코딩 프리셋 → ffmpeg 인자. VideoToolbox(가속) 와 소프트웨어 두 경로를 가진다.
+//! Encoding preset → ffmpeg arguments, with a VideoToolbox (hardware) and a software path.
 use crate::model::Preset;
 use std::path::Path;
 
 const AAC_MP4: &[&str] = &["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"];
 
-/// VideoToolbox 인코더가 있는 프리셋.
+/// Presets that have a VideoToolbox encoder.
 pub fn hw_capable(p: Preset) -> bool {
     matches!(p, Preset::Mp4H264 | Preset::Mp4Hevc | Preset::MovProres)
 }
@@ -39,7 +39,7 @@ pub fn encode_args(
             &["-c:v", "prores_ks", "-profile:v", "2"],
             &["-c:a", "pcm_s16le"],
         ),
-        // 맥에는 VP9 하드웨어 인코더가 없다. 디코딩만 가속한다.
+        // Macs have no VP9 hardware encoder; only decoding is accelerated.
         (Preset::WebmVp9, _) => (
             &[
                 "-c:v",
@@ -58,12 +58,12 @@ pub fn encode_args(
     };
     let mut a: Vec<String> = vec!["-hide_banner".into(), "-y".into()];
     if hw && !p.is_audio_only() {
-        // 지원하지 않는 코덱(AV1 등)이면 ffmpeg 가 알아서 소프트웨어 디코딩한다.
+        // For unsupported codecs (AV1, ...) ffmpeg falls back to software decoding by itself.
         a.extend(["-hwaccel".into(), "videotoolbox".into()]);
     }
     a.extend(["-i".into(), input.display().to_string()]);
     if let Some(h) = max_height.filter(|_| !p.is_audio_only()) {
-        // 원본보다 키우지 않고, 너비는 비율에 맞춘 짝수
+        // never upscale; width keeps the aspect ratio and stays even
         a.extend(["-vf".into(), format!("scale=-2:'min({h},ih)'")]);
     }
     a.extend(video.iter().chain(audio).map(|s| s.to_string()));
@@ -72,7 +72,7 @@ pub fn encode_args(
     Some(a)
 }
 
-/// `-progress pipe:1` 의 key=value 줄. 길이를 모르면 진행률도 모른다.
+/// A key=value line of `-progress pipe:1`. Without a known duration there is no progress.
 pub fn parse_progress(line: &str, duration_secs: Option<f64>) -> Option<f32> {
     let (k, v) = line.trim().split_once('=')?;
     match k {

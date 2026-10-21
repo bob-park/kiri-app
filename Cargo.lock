@@ -2351,6 +2351,7 @@ name = "kiri-core"
 version = "0.3.1"
 dependencies = [
  "libc",
+ "log",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

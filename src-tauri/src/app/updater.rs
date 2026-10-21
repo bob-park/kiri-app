@@ -1,6 +1,6 @@
-//! GitHub Releases 의 latest.json 으로 새 버전을 확인하고 설치한다.
-//! 창이 닫혀도 앱은 메뉴 막대에 살아 있으므로 주기 확인은 Rust 에서 돈다.
-use crate::{app::state::AppState, quit};
+//! Checks GitHub Releases `latest.json` for a new version, downloads and installs it.
+//! The app keeps running in the menu bar with no window, so the periodic check runs in Rust.
+use crate::app::{quit, state::AppState, tray};
 use kiri_core::{engine::Engine, model::Job};
 use serde::Serialize;
 use std::{
@@ -13,7 +13,7 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// 찾은 업데이트와, 받아 두었으면 그 파일. 메모리에만 둔다(앱을 끄면 다음에 다시 받는다).
+/// The update found and, once downloaded, its bytes. Memory only (a restart downloads again).
 struct Pending {
     update: Update,
     bytes: Option<Arc<Vec<u8>>>,
@@ -22,14 +22,14 @@ struct Pending {
 #[derive(Default)]
 pub struct UpdateState(Mutex<Option<Pending>>);
 
-/// 백그라운드 받기가 도는 중.
+/// A background download is running.
 static DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct UpdateInfo {
     pub version: String,
     pub notes: String,
-    /// 받기를 마쳐 바로 설치할 수 있다.
+    /// Downloaded; can be installed right away.
     pub ready: bool,
     pub downloading: bool,
 }
@@ -51,10 +51,37 @@ pub struct UpdateProgress {
     pub total: Option<u64>,
 }
 
+/// Payload: `UpdateStatus`. One event for every updater change.
+pub const UPDATE_STATUS: &str = "update://status";
+
+/// What changed, tagged by `kind`; struct payloads are flattened next to it.
+#[derive(Serialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UpdateStatus {
+    /// A check found an update.
+    Available(UpdateInfo),
+    Progress(UpdateProgress),
+    /// The background download finished; the update can be installed right away.
+    Ready(UpdateInfo),
+    DownloadFailed {
+        error: String,
+    },
+    /// "Restart when the queue finishes" was chosen.
+    Scheduled,
+    /// Installing (or the tray check) failed.
+    Error {
+        error: String,
+    },
+}
+
+fn emit(app: &AppHandle, status: UpdateStatus) {
+    let _ = app.emit(UPDATE_STATUS, status);
+}
+
 const FIRST_CHECK: Duration = Duration::from_secs(10);
 const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// "큐가 끝나면 재시작" 을 고른 상태.
+/// "Restart when the queue finishes" is scheduled.
 static RESTART_AFTER_QUEUE: AtomicBool = AtomicBool::new(false);
 
 pub fn should_install(pending: bool, jobs: &[Job]) -> bool {
@@ -82,23 +109,23 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
         let mut slot = state.0.lock().unwrap();
         let old = slot.take();
         *slot = found.map(|update| {
-            // 같은 버전을 다시 찾았으면 이미 받은 파일을 버리지 않는다.
+            // Found the same version again: keep the bytes already downloaded.
             let bytes = old
                 .filter(|o| o.update.version == update.version)
                 .and_then(|o| o.bytes);
             Pending { update, bytes }
         });
     }
-    start_download(app); // DOWNLOADING 을 먼저 켜서 아래 info 가 downloading=true 를 싣는다
+    start_download(app); // sets DOWNLOADING first so the info below carries downloading=true
     let info = status(app);
     if let Some(i) = &info {
-        let _ = app.emit("update-available", i);
+        emit(app, UpdateStatus::Available(i.clone()));
     }
-    crate::tray::relabel_update(app);
+    tray::relabel_update(app);
     Ok(info)
 }
 
-/// 진행률을 update-progress 로 알리며 받는다. 백그라운드 받기와 설치가 같이 쓴다.
+/// Downloads while reporting `Progress`. Shared by the background download and install.
 async fn download(app: &AppHandle, update: &Update) -> Result<Vec<u8>, String> {
     let mut received: u64 = 0;
     let mut last_pct = u64::MAX;
@@ -109,7 +136,10 @@ async fn download(app: &AppHandle, update: &Update) -> Result<Vec<u8>, String> {
                 let pct = total.map_or(0, |t| received * 100 / t.max(1));
                 if pct != last_pct {
                     last_pct = pct;
-                    let _ = app.emit("update-progress", UpdateProgress { received, total });
+                    emit(
+                        app,
+                        UpdateStatus::Progress(UpdateProgress { received, total }),
+                    );
                 }
             },
             || {},
@@ -118,7 +148,7 @@ async fn download(app: &AppHandle, update: &Update) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
-/// 보관한 업데이트를 아직 받지 않았으면 백그라운드에서 받는다. 이미 받는 중이면 아무것도 하지 않는다.
+/// Downloads the kept update in the background unless it is downloaded or already downloading.
 pub fn start_download(app: &AppHandle) {
     let update = {
         let state = app.state::<UpdateState>();
@@ -134,7 +164,7 @@ pub fn start_download(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = download(&app, &update).await;
-        // 받은 버전이 아직 보관 중인 버전일 때만 결과를 쓴다.
+        // Store the result only if the downloaded version is still the kept one.
         let outcome = {
             let state = app.state::<UpdateState>();
             let mut slot = state.0.lock().unwrap();
@@ -146,30 +176,28 @@ pub fn start_download(app: &AppHandle) {
                 _ => None,
             }
         };
-        // 결과를 slot 에 쓴 뒤에 끈다 — 그 사이 check 가 ready=false·downloading=false 를 보지 않게.
-        // 아래 start_download 재호출보다는 먼저여야 한다.
+        // Clear the flag after writing the slot, so a check in between never sees
+        // ready=false and downloading=false. It must also precede the start_download retry below.
         DOWNLOADING.store(false, Ordering::SeqCst);
         match outcome {
-            Some(Ok(i)) => {
-                let _ = app.emit("update-ready", i);
+            Some(Ok(i)) => emit(&app, UpdateStatus::Ready(i)),
+            Some(Err(error)) => {
+                log::warn!("update background download failed: {error}");
+                emit(&app, UpdateStatus::DownloadFailed { error });
             }
-            Some(Err(e)) => {
-                eprintln!("kiri update: background download failed: {e}");
-                let _ = app.emit("update-download-failed", e);
-            }
-            // 받는 사이 다른 버전으로 바뀌었으면 이 결과는 버리고 새 버전을 이어서 받는다.
+            // The kept version changed meanwhile: drop this result and download the new one.
             None => start_download(&app),
         }
     });
 }
 
-/// 받고 → 설치 → 재시작. 실패해도 보관한 Update 는 남겨 다시 시도할 수 있다.
+/// Download → install → restart. On failure the kept update stays, so it can be retried.
 pub async fn install(app: &AppHandle) -> Result<(), String> {
     static INSTALLING: AtomicBool = AtomicBool::new(false);
     if INSTALLING.swap(true, Ordering::SeqCst) {
         return Err("busy".into());
     }
-    // 지금 설치하므로 남아 있던 "큐가 끝나면" 예약은 버린다.
+    // Installing now, so drop any pending "after the queue" schedule.
     RESTART_AFTER_QUEUE.store(false, Ordering::SeqCst);
     let fail = |e: String| {
         INSTALLING.store(false, Ordering::SeqCst);
@@ -183,30 +211,33 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         .as_ref()
         .map(|p| (p.update.clone(), p.bytes.clone()))
         .ok_or_else(|| fail("error.no_update".to_string()))?;
-    // 받아 두었으면 그대로, 아니면 지금 받는다. 백그라운드 받기와 드물게 겹치면 한 번 더 받는다(결과는 같음).
+    // Use the downloaded bytes, or download now. A rare overlap with the background
+    // download just downloads twice (same result).
     let bytes = match ready {
         Some(b) => b,
         None => Arc::new(download(app, &update).await.map_err(fail)?),
     };
-    update.install(bytes.as_slice()).map_err(|e| fail(e.to_string()))?;
-    // restart 는 RunEvent::Exit 를 거치지 않을 수 있으므로 여기서 작업을 대기로 되돌리고
-    // yt-dlp·ffmpeg 를 정리한다(최대 2초 블로킹이라 블로킹 스레드에서).
+    update
+        .install(bytes.as_slice())
+        .map_err(|e| fail(e.to_string()))?;
+    // restart may skip RunEvent::Exit, so requeue jobs and stop yt-dlp/ffmpeg here
+    // (blocks up to 2 s, hence the blocking thread).
     let engine = app.state::<Engine>().inner().clone();
     let _ = tauri::async_runtime::spawn_blocking(move || {
         engine.shutdown_for_exit(Duration::from_secs(2))
     })
     .await;
-    quit::allow_exit(); // 재시작이 종료 확인에 막히지 않게
+    quit::allow_exit(); // so the quit confirmation never blocks the restart
     app.restart()
 }
 
-/// after_queue 이고 큐가 남아 있으면 예약만 한다.
-/// 예약을 먼저 걸고 큐를 본다: 사이에 마지막 작업이 끝나도 on_queue_change 나
-/// 여기 중 정확히 한쪽만 swap 으로 예약을 가져가 설치한다.
+/// With `after_queue` and work still queued, only schedules the install.
+/// The schedule is set before the queue is checked: if the last job finishes in between,
+/// exactly one of `on_queue_change` and this function takes the schedule (swap) and installs.
 pub async fn request_install(app: &AppHandle, after_queue: bool) -> Result<(), String> {
     if after_queue {
         RESTART_AFTER_QUEUE.store(true, Ordering::SeqCst);
-        let _ = app.emit("update-scheduled", true);
+        emit(app, UpdateStatus::Scheduled);
         if !(app.state::<Engine>().is_idle() && RESTART_AFTER_QUEUE.swap(false, Ordering::SeqCst)) {
             return Ok(());
         }
@@ -214,28 +245,29 @@ pub async fn request_install(app: &AppHandle, after_queue: bool) -> Result<(), S
     install(app).await
 }
 
-/// 큐가 바뀔 때마다. 예약돼 있고 큐가 비면 설치한다.
+/// On every queue change: installs if scheduled and the queue is idle.
 pub fn on_queue_change(app: &AppHandle, jobs: &[Job]) {
     if should_install(RESTART_AFTER_QUEUE.load(Ordering::SeqCst), jobs)
         && RESTART_AFTER_QUEUE.swap(false, Ordering::SeqCst)
     {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = install(&app).await {
-                let _ = app.emit("update-error", e);
+            if let Err(error) = install(&app).await {
+                emit(&app, UpdateStatus::Error { error });
             }
         });
     }
 }
 
-/// setup 에서 한 번. 설정을 매 주기 다시 읽으므로 토글이 바로 반영된다. 오프라인 실패는 로그만.
+/// Called once from setup. Settings are re-read every round, so the toggle applies at once.
+/// Failures (e.g. offline) are only logged.
 pub fn spawn_periodic(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_CHECK).await;
         loop {
             if app.state::<AppState>().settings().update.auto_check {
                 if let Err(e) = check(&app).await {
-                    eprintln!("kiri update: check failed: {e}");
+                    log::warn!("update check failed: {e}");
                 }
             }
             tokio::time::sleep(INTERVAL).await;
@@ -243,7 +275,7 @@ pub fn spawn_periodic(app: AppHandle) {
     });
 }
 
-/// 트레이 항목 하나가 "확인" 과 "설치" 를 겸한다. 설치는 큐가 끝난 뒤로 예약한다.
+/// One tray item is both "check" and "install". The install waits for the queue.
 pub fn on_tray_click(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let r = if status(&app).is_some() {
@@ -251,10 +283,30 @@ pub fn on_tray_click(app: AppHandle) {
         } else {
             check(&app).await.map(|_| ())
         };
-        if let Err(e) = r {
-            let _ = app.emit("update-error", e);
+        if let Err(error) = r {
+            emit(&app, UpdateStatus::Error { error });
         }
     });
+}
+
+#[tauri::command]
+pub fn update_status(app: AppHandle) -> Option<UpdateInfo> {
+    status(&app)
+}
+
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    check(&app).await
+}
+
+#[tauri::command]
+pub async fn install_update(app: AppHandle, after_queue: bool) -> Result<(), String> {
+    request_install(&app, after_queue).await
+}
+
+#[tauri::command]
+pub fn retry_update_download(app: AppHandle) {
+    start_download(&app);
 }
 
 #[cfg(test)]
@@ -317,5 +369,51 @@ mod tests {
         })
         .unwrap();
         assert_eq!(p, serde_json::json!({"received": 5, "total": null}));
+    }
+
+    #[test]
+    fn update_status_json_shape() {
+        let info = || UpdateInfo {
+            version: "0.2.0".into(),
+            notes: "fix".into(),
+            ready: true,
+            downloading: false,
+        };
+        let cases = [
+            (
+                UpdateStatus::Available(info()),
+                serde_json::json!({"kind": "available", "version": "0.2.0", "notes": "fix", "ready": true, "downloading": false}),
+            ),
+            (
+                UpdateStatus::Progress(UpdateProgress {
+                    received: 5,
+                    total: Some(10),
+                }),
+                serde_json::json!({"kind": "progress", "received": 5, "total": 10}),
+            ),
+            (
+                UpdateStatus::Ready(info()),
+                serde_json::json!({"kind": "ready", "version": "0.2.0", "notes": "fix", "ready": true, "downloading": false}),
+            ),
+            (
+                UpdateStatus::DownloadFailed {
+                    error: "net".into(),
+                },
+                serde_json::json!({"kind": "download_failed", "error": "net"}),
+            ),
+            (
+                UpdateStatus::Scheduled,
+                serde_json::json!({"kind": "scheduled"}),
+            ),
+            (
+                UpdateStatus::Error {
+                    error: "busy".into(),
+                },
+                serde_json::json!({"kind": "error", "error": "busy"}),
+            ),
+        ];
+        for (status, want) in cases {
+            assert_eq!(serde_json::to_value(status).unwrap(), want);
+        }
     }
 }

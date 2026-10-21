@@ -1,10 +1,18 @@
-use crate::app::state::AppState;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+//! The `main` and `settings` windows, Dock visibility and the `open_settings` command.
+
+use crate::{
+    app::{i18n, state::AppState},
+    shared::error::{AppError, AppResult},
+};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 pub const MAIN: &str = "main";
 pub const SETTINGS: &str = "settings";
 
-/// 창을 숨기면 Dock 에서도 빠지고 메뉴 막대에만 남는다.
+/// No payload. Tells the settings page to go back to its first tab.
+pub const SETTINGS_OPENED: &str = "settings://opened";
+
+/// With every window hidden the app leaves the Dock and lives in the menu bar only.
 pub fn set_dock_visible(app: &AppHandle, visible: bool) {
     let policy = if visible {
         tauri::ActivationPolicy::Regular
@@ -25,7 +33,7 @@ pub fn show_main(app: &AppHandle) -> Result<(), String> {
         .title("kiri")
         .inner_size(720.0, 520.0)
         .min_inner_size(560.0, 400.0)
-        // 링크 드롭을 HTML5 drop 이벤트로 받기 위해 Tauri 의 파일 드롭 처리를 끈다.
+        // Tauri's file-drop handling is off so link drops arrive as HTML5 drop events.
         .disable_drag_drop_handler()
         .build()
         .map_err(|e| e.to_string())?;
@@ -33,7 +41,7 @@ pub fn show_main(app: &AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
     w.on_window_event(move |e| {
         if let WindowEvent::CloseRequested { api, .. } = e {
-            // 창은 항상 살려 둔다. 닫기 = 숨기기 또는 앱 종료(확인 포함).
+            // The window is never destroyed. Close = hide, or quit the app (with confirmation).
             api.prevent_close();
             if app_handle
                 .state::<AppState>()
@@ -55,13 +63,19 @@ pub fn show_settings(app: &AppHandle) -> Result<(), String> {
     set_dock_visible(app, true);
     if let Some(w) = app.get_webview_window(SETTINGS) {
         w.show().map_err(|e| e.to_string())?;
+        let _ = app.emit_to(SETTINGS, SETTINGS_OPENED, ());
         return w.set_focus().map_err(|e| e.to_string());
     }
     WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("/".into()))
-        .title(crate::i18n::current(app).settings_title)
+        .title(i18n::current(app).settings_title)
         .inner_size(560.0, 460.0)
         .resizable(false)
         .build()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_settings(app: AppHandle) -> AppResult<()> {
+    show_settings(&app).map_err(AppError::Failed)
 }

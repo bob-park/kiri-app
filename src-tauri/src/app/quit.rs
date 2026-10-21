@@ -1,5 +1,5 @@
-//! 종료 확인. 다운로드가 돌고 있으면 바로 끄지 않고 묻는다.
-use crate::{i18n, windows};
+//! Quit confirmation: with downloads running, quitting asks first.
+use crate::app::{i18n, windows};
 use kiri_core::engine::Engine;
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -9,10 +9,10 @@ use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 static CONFIRMED: AtomicBool = AtomicBool::new(false);
-/// 확인 대화상자가 떠 있다(⌘Q 연타로 겹쳐 뜨지 않게).
+/// The confirmation dialog is open (so repeated ⌘Q never stacks dialogs).
 static DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
 
-/// 이후의 종료 요청은 묻지 않는다(확인 대화상자의 "종료", 업데이트 재시작).
+/// Later quit requests no longer ask (the dialog's "Quit", an update restart).
 pub fn allow_exit() {
     CONFIRMED.store(true, Ordering::SeqCst);
 }
@@ -30,13 +30,14 @@ pub fn on_run_event(app: &AppHandle, event: RunEvent) {
                 confirm(app);
             }
         }
-        // Dock 메뉴의 종료 등 `terminate:` 는 막을 수 없다. 작업을 대기로 되돌리고 자식을 정리한다.
+        // `terminate:` (e.g. Quit from the Dock menu) cannot be prevented. Requeue jobs
+        // and stop child processes.
         RunEvent::Exit => {
             if let Some(engine) = app.try_state::<Engine>() {
                 engine.shutdown_for_exit(Duration::from_secs(2));
             }
         }
-        // Dock 아이콘 클릭
+        // Dock icon click
         RunEvent::Reopen { .. } => {
             let _ = windows::show_main(app);
         }

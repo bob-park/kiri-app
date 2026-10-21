@@ -1,4 +1,4 @@
-//! 앱 하나에 하나. 큐 상태 + 동시 실행 + 프로세스 취소를 묶는다. UI 와 CLI 가 같은 Engine 을 쓴다.
+//! One per app: ties queue state, concurrent runs and process cancellation together. The UI and the CLI share the same Engine.
 use crate::{
     files,
     model::{Job, JobOptions, JobSource, JobState, NewJob, Preset, Tools},
@@ -24,7 +24,7 @@ pub struct EngineConfig {
     pub max_concurrent: usize,
     pub hw_accel: bool,
     pub download_dir: PathBuf,
-    /// CLI add 의 기본값 ("best" | "audio" | "<N>p")
+    /// Default for CLI add ("best" | "audio" | "<N>p")
     pub default_quality: String,
     pub default_preset: Preset,
     pub default_subtitles: Vec<String>,
@@ -62,7 +62,7 @@ pub enum EngineError {
 }
 
 impl EngineError {
-    /// 프론트엔드 i18n 키(error.<code>)와 CLI 응답에 쓰는 고정 코드.
+    /// Stable code used for the frontend i18n key (error.<code>) and CLI responses.
     pub fn code(&self) -> &'static str {
         match self {
             EngineError::NotFound(_) => "not_found",
@@ -96,10 +96,10 @@ struct Inner {
     tools: Tools,
     rt: Handle,
     listener: Listener,
-    /// 스냅샷 생성과 리스너 호출을 묶어 직렬화한다. 이게 없으면 늦게 만든
-    /// 스냅샷이 먼저 나가서 UI 가 낡은 상태에 멈춘다.
+    /// Serializes building a snapshot together with calling the listener. Without it a
+    /// later snapshot can go out first and leave the UI stuck on stale state.
     notify_lock: Mutex<()>,
-    /// 앱 종료 중. 더 이상 작업을 시작하지 않는다.
+    /// The app is quitting; no more jobs start.
     shutting_down: AtomicBool,
 }
 
@@ -107,9 +107,9 @@ struct Inner {
 pub struct Engine(Arc<Inner>);
 
 impl Engine {
-    /// `listener` 는 큐가 바뀔 때마다 최신 목록으로 호출된다. 호출은 항상 직렬이고
-    /// 순서가 보장된다. 그 대신 리스너 안에서 Engine 의 변경 메서드(add/stop/…)를
-    /// 동기적으로 부르면 안 된다(재진입 교착).
+    /// `listener` is called with the latest list on every queue change. Calls are always serial
+    /// and ordered. In exchange, the listener must not call Engine mutators (add/stop/…)
+    /// synchronously (re-entrant deadlock).
     pub fn new(
         paths: EnginePaths,
         tools: Tools,
@@ -119,10 +119,10 @@ impl Engine {
     ) -> Engine {
         let (mut state, trusted) = paths.store.load();
         state.recover();
-        // 예전 버전의 작업 캐시. 받던 작업은 처음부터 다시 받는다.
+        // Job cache of older versions. Jobs in progress restart from scratch.
         let _ = std::fs::remove_dir_all(paths.cache_dir.join("jobs"));
-        // 큐에 없는 패키지(삭제 도중 종료 등)는 다시 쓰일 일이 없다. 표식이 있는 것만 지운다.
-        // 큐 파일이 손상됐으면 어떤 패키지가 쓰이는지 모르므로 건드리지 않는다.
+        // Packages not in the queue (e.g. quit mid-removal) are never reused. Only marked ones are removed.
+        // With a corrupt queue file we cannot tell which packages are in use, so none are touched.
         if trusted && let Ok(entries) = std::fs::read_dir(&config.download_dir) {
             let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
             let listed: Vec<PathBuf> = state
@@ -152,7 +152,7 @@ impl Engine {
         engine
     }
 
-    /// 대기 작업 실행을 시작한다. setup 이 끝난 뒤(리스너가 준비된 뒤) 한 번 부른다.
+    /// Starts running queued jobs. Call once after setup (once the listener is ready).
     pub fn start(&self) {
         self.pump();
     }
@@ -182,7 +182,7 @@ impl Engine {
             .any(|j| j.state.is_active())
     }
 
-    /// 대기·실행 중인 작업이 하나도 없다.
+    /// No job is queued or running.
     pub fn is_idle(&self) -> bool {
         !self
             .0
@@ -200,7 +200,7 @@ impl Engine {
 
     pub fn set_config(&self, c: EngineConfig) {
         *self.0.config.lock().unwrap() = c;
-        self.pump(); // 동시 실행 수가 늘었을 수 있다
+        self.pump(); // the concurrency limit may have grown
     }
 
     pub async fn probe(&self, url: &str) -> Result<VideoInfo, EngineError> {
@@ -230,14 +230,14 @@ impl Engine {
         self.save();
         self.notify();
         self.pump();
-        // pump 가 같은 호출 안에서 상태를 바꿨을 수 있다. 최신 상태를 돌려준다.
+        // pump may have changed the state within this call; return the latest.
         self.list()
             .into_iter()
             .find(|j| j.id == job.id)
             .unwrap_or(job)
     }
 
-    /// CLI `transcode`: 로컬 파일을 변환하는 작업. 원본은 읽기만 한다.
+    /// CLI `transcode`: a job converting a local file. The source is only read.
     pub async fn add_file(
         &self,
         path: PathBuf,
@@ -263,7 +263,7 @@ impl Engine {
                     .ok_or_else(|| EngineError::BadQuality(quality.clone()))?,
             ),
         };
-        // 오디오 프리셋은 해상도가 없다: 화질 대신 "audio" 로 표시한다.
+        // Audio presets have no resolution: show "audio" as the quality.
         let (quality, max_height) = if preset.is_audio_only() {
             ("audio".to_string(), None)
         } else {
@@ -291,7 +291,7 @@ impl Engine {
         }))
     }
 
-    /// ffprobe 로 길이를 읽는다. 읽지 못하면 미디어가 아니라고 본다. 길이가 N/A 면 None.
+    /// Reads the duration with ffprobe. Unreadable means not media. N/A duration is None.
     async fn media_duration(&self, path: &Path) -> Result<Option<f64>, EngineError> {
         let args: Vec<String> = [
             "-v",
@@ -312,7 +312,7 @@ impl Engine {
         Ok(out.trim().parse::<f64>().ok())
     }
 
-    /// CLI 경로: probe → 화질/프리셋/자막 해석 → add. 생략한 옵션은 설정 기본값.
+    /// CLI path: probe → resolve quality/preset/subtitles → add. Omitted options use the settings defaults.
     pub async fn add_url(
         &self,
         url: &str,
@@ -387,7 +387,7 @@ impl Engine {
         let job = removed.ok_or(EngineError::NotFound(id))?;
         let token = self.0.running.lock().unwrap().get(&id).cloned();
         match (token, job.work_dir) {
-            (Some(t), _) => t.cancel(), // 작업 태스크가 끝나면서 패키지를 지운다
+            (Some(t), _) => t.cancel(), // the job task removes the package as it ends
             (None, Some(dir)) => {
                 files::remove_part_dir(&dir);
             }
@@ -398,7 +398,7 @@ impl Engine {
         Ok(())
     }
 
-    /// 완료된 작업을 목록에서 한 번에 뺀다. 받은 파일은 건드리지 않는다. 뺀 개수를 돌려준다.
+    /// Removes all completed jobs from the list, leaving their files alone. Returns how many.
     pub fn clear_completed(&self) -> usize {
         let removed = {
             let mut st = self.0.state.lock().unwrap();
@@ -432,9 +432,9 @@ impl Engine {
         Ok(())
     }
 
-    /// 앱 종료 직전. 실행 중인 작업을 대기로 되돌리고(다음 실행 때 이어 받음) 자식
-    /// 프로세스를 취소한 뒤 `timeout` 까지 정리를 기다린다. 이후로는 작업을 시작하지 않는다.
-    /// 블로킹 호출이다.
+    /// Right before the app exits: requeues running jobs (resumed on next launch), cancels
+    /// child processes and waits up to `timeout` for cleanup. No job starts afterwards.
+    /// Blocking call.
     pub fn shutdown_for_exit(&self, timeout: Duration) {
         self.0.shutting_down.store(true, Ordering::SeqCst);
         {
@@ -446,7 +446,7 @@ impl Engine {
                 job.eta = None;
             }
         }
-        self.save(); // 기다리는 도중 강제 종료돼도 대기 상태로 남게 먼저 저장한다
+        self.save(); // save first so a forced kill while waiting still leaves jobs queued
         for token in self.0.running.lock().unwrap().values() {
             token.cancel();
         }
@@ -460,19 +460,19 @@ impl Engine {
     fn save(&self) {
         let st = self.0.state.lock().unwrap();
         if let Err(e) = self.0.paths.store.save(&st) {
-            eprintln!("kiri queue: save failed: {e}");
+            log::error!("queue save failed: {e}");
         }
     }
 
-    /// 스냅샷 + 리스너 호출을 한 임계 구역에서 처리한다. `state`/`running` 락을
-    /// 잡은 채로 부르지 않는다(락 순서: notify_lock → state).
+    /// Snapshot + listener call in one critical section. Never call it while holding
+    /// the `state`/`running` locks (lock order: notify_lock → state).
     fn notify(&self) {
         let _serial = self.0.notify_lock.lock().unwrap();
         let jobs = self.list();
         (self.0.listener)(&jobs);
     }
 
-    /// 빈 슬롯만큼 대기 작업을 시작한다.
+    /// Starts as many queued jobs as there are free slots.
     fn pump(&self) {
         loop {
             if self.0.shutting_down.load(Ordering::SeqCst) {
@@ -496,7 +496,7 @@ impl Engine {
                 };
                 job.progress = 0.0;
                 let out_dir = job.result_dir(&cfg.download_dir);
-                // 저장된 패키지가 없거나(지워짐·만들지 못함) 표식이 없으면 결과 폴더에 새로 만든다.
+                // No saved package (removed or never created) or no marker: create a new one in the output folder.
                 let work_dir = match &job.work_dir {
                     Some(d) if files::is_part_dir(d) => d.clone(),
                     _ => {
@@ -513,8 +513,8 @@ impl Engine {
                             }
                         };
                         let dir = files::unique_path(&out_dir, &name);
-                        // 바로 만들어 이름을 선점한다(같은 이름의 다음 작업이 다른 이름을 받게).
-                        // 실패하면 저장하지 않고, pipeline 이 결과 폴더 오류로 보고한다.
+                        // Create it now to claim the name (the next job with the same title gets another).
+                        // On failure nothing is saved; the pipeline reports an output-folder error.
                         if files::make_part_dir(&dir).is_ok() {
                             job.work_dir = Some(dir.clone());
                         }
@@ -556,7 +556,7 @@ impl Engine {
             let mut st = self.0.state.lock().unwrap();
             let Some(job) = st.get_mut(id) else { return };
             if !job.state.is_active() {
-                return; // 이미 중지·삭제됨
+                return; // already stopped or removed
             }
             let next = match r.stage {
                 Stage::Downloading => JobState::Downloading,
@@ -582,8 +582,8 @@ impl Engine {
                 None => false,
                 Some(job) => {
                     match &result {
-                        // 파일이 실제로 생겼다. 그 사이 중지·종료됐어도 완료로 남겨야
-                        // 재시작이 같은 영상을 또 받지 않는다.
+                        // The file really exists. Even if stopped or quitting meanwhile it stays completed,
+                        // so a restart never downloads the same video again.
                         Ok(path) => {
                             job.state = JobState::Completed;
                             job.progress = 1.0;
@@ -602,7 +602,7 @@ impl Engine {
                 }
             }
         };
-        // 중지·실패는 패키지를 남겨 재시작 때 이어 받는다.
+        // Stopped or failed jobs keep their package so a restart resumes.
         if let Some(dir) = work_dir.filter(|_| !still_listed || result.is_ok()) {
             files::remove_part_dir(dir);
         }
@@ -767,7 +767,7 @@ mod tests {
             e.d.path().join("Movies/kiri/Rust in 100 Seconds.kiripart")
         );
         assert!(wd.join(".kiri").is_file());
-        // 저장된 큐에도 남아야 재실행 때 이어 받는다.
+        // It must also stay in the saved queue to resume on the next launch.
         let saved = QueueState::load(&e.d.path().join("data/queue.json"));
         assert_eq!(saved.jobs[0].work_dir.as_deref(), Some(wd.as_path()));
         e.engine.stop(1).unwrap();
@@ -815,7 +815,7 @@ mod tests {
         e.engine.add(new_job("a")).unwrap();
         let wd = work_dir_of(&e.engine, 1);
         e.engine.stop(1).unwrap();
-        // 태스크가 완전히 끝나 idle 상태에서 지우는 경로를 탄다.
+        // Takes the path that removes it once the task has fully ended (idle).
         wait_for(&e.engine, |_| e.engine.0.running.lock().unwrap().is_empty()).await;
         assert!(wd.exists());
         e.engine.remove(1).unwrap();
@@ -882,8 +882,8 @@ mod tests {
         let (saw_overlap, counter) = (overlap.clone(), inside.clone());
         let engine = engine_with_listener(d.path(), FAKE_YTDLP_DOWNLOAD, 2, move |jobs| {
             use std::sync::atomic::Ordering::SeqCst;
-            // 느린 리스너(실제로는 IPC emit). 직렬화돼 있지 않으면 두 통지가 겹치고,
-            // 먼저 뜬 낡은 스냅샷이 가장 늦게 도착한다.
+            // A slow listener (an IPC emit in practice). Without serialization two notifications
+            // overlap and the older snapshot arrives last.
             if counter.fetch_add(1, SeqCst) > 0 {
                 saw_overlap.store(true, SeqCst);
             }
@@ -898,7 +898,7 @@ mod tests {
             j.len() == 2 && j.iter().all(|j| j.state == JobState::Completed)
         })
         .await;
-        tokio::time::sleep(Duration::from_millis(500)).await; // 남은 알림이 모두 나갈 시간
+        tokio::time::sleep(Duration::from_millis(500)).await; // time for pending notifications to go out
         let snapshots = seen.lock().unwrap().clone();
         assert!(!snapshots.is_empty(), "listener never called");
         assert!(
@@ -943,7 +943,7 @@ mod tests {
         let e = env(&format!("{SLOW_DOWNLOAD}{FAKE_YTDLP_DOWNLOAD}"), 2);
         e.engine.add(new_job("a")).unwrap();
         e.engine.stop(1).unwrap();
-        e.engine.restart(1).unwrap(); // 이전 프로세스가 아직 종료 중일 수 있다
+        e.engine.restart(1).unwrap(); // the previous process may still be exiting
         wait_for(&e.engine, |j| j[0].state == JobState::Completed).await;
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert_eq!(state_of(&e.engine, 1), JobState::Completed);
@@ -1024,7 +1024,7 @@ mod tests {
             ),
             (None, "audio", Preset::Mp3)
         );
-        assert_eq!(a.options.subtitles, vec!["ko"]); // 기본 자막
+        assert_eq!(a.options.subtitles, vec!["ko"]); // default subtitles
         assert!(matches!(
             e.engine
                 .add_url("https://youtu.be/x", None, Some("avi".into()), None)
@@ -1053,7 +1053,7 @@ mod tests {
             .unwrap();
         assert!(e.engine.0.running.lock().unwrap().is_empty());
         assert_eq!(state_of(&e.engine, 1), JobState::Queued);
-        // 취소된 작업이 끝나면서 pump 가 다시 시작하지 않아야 한다.
+        // A cancelled job ending must not make pump start it again.
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(e.engine.0.running.lock().unwrap().is_empty());
         assert_eq!(state_of(&e.engine, 1), JobState::Queued);
@@ -1068,7 +1068,7 @@ mod tests {
         q.add(new_job("a"), 0);
         q.get_mut(1).unwrap().state = JobState::Downloading;
         q.save(&d.path().join("data/queue.json")).unwrap();
-        let engine = engine_at(d.path(), "sleep 30", 1); // start() 를 부르지 않는다
+        let engine = engine_at(d.path(), "sleep 30", 1); // start() is not called
         assert_eq!(state_of(&engine, 1), JobState::Queued);
         assert_eq!(engine.add(new_job("b")).unwrap().id, 2);
     }
@@ -1103,7 +1103,7 @@ mod tests {
         j.eta = Some("00:01".into());
         q.save(&d.path().join("data/queue.json")).unwrap();
         let engine = engine_at(d.path(), "sleep 30", 1);
-        engine.0.shutting_down.store(true, Ordering::SeqCst); // pump 가 시작하지 않게
+        engine.0.shutting_down.store(true, Ordering::SeqCst); // so pump starts nothing
         engine.restart(1).unwrap();
         let j = &engine.list()[0];
         assert_eq!(j.state, JobState::Queued);
@@ -1128,7 +1128,7 @@ mod tests {
         // 5 stays Queued
         q.save(&d.path().join("data/queue.json")).unwrap();
         let engine = engine_at(d.path(), "sleep 30", 1);
-        engine.0.shutting_down.store(true, Ordering::SeqCst); // pump 가 시작하지 않게
+        engine.0.shutting_down.store(true, Ordering::SeqCst); // so pump starts nothing
 
         assert_eq!(engine.clear_completed(), 2);
         let ids: Vec<u64> = engine.list().iter().map(|j| j.id).collect();
@@ -1192,7 +1192,7 @@ mod tests {
         files::make_part_dir(&pkg).unwrap();
         let other_case = d.path().join("MOVIES/KIRI/s.kiripart");
         if !other_case.exists() {
-            return; // 대소문자를 구분하는 파일 시스템에서는 확인할 수 없다
+            return; // cannot be checked on a case-sensitive file system
         }
         let mut q = QueueState::default();
         q.add(new_job("s"), 0);
@@ -1342,7 +1342,7 @@ mod tests {
     async fn file_transcode_honours_output_dir() {
         let e = env("sleep 30", 1);
         let src = source_file(e.d.path(), "clip.mkv");
-        let out_dir = e.d.path().join("converted"); // 없는 폴더는 만든다
+        let out_dir = e.d.path().join("converted"); // a missing folder is created
         e.engine
             .add_file(src, Some(out_dir.clone()), "mp3", None)
             .await
@@ -1392,7 +1392,7 @@ mod tests {
     async fn source_deleted_before_start_fails_job() {
         let e = env("sleep 30", 1);
         let bin = e.d.path().join("bin");
-        // ffmpeg 가짜: -i 다음 파일이 없으면 실패
+        // fake ffmpeg: fails if the file after -i is missing
         testutil::script(
             &bin,
             "ffmpeg",
@@ -1400,14 +1400,14 @@ mod tests {
                 "prev=\"\"\nfor a; do if [ \"$prev\" = \"-i\" ] && [ ! -f \"$a\" ]; then echo \"$a: No such file or directory\" >&2; exit 1; fi; prev=\"$a\"; done\n{FAKE_FFMPEG}"
             ),
         );
-        e.engine.add(new_job("busy")).unwrap(); // 슬롯 점유 (sleep 30)
+        e.engine.add(new_job("busy")).unwrap(); // occupies the slot (sleep 30)
         let src = source_file(e.d.path(), "clip.mkv");
         e.engine
             .add_file(src.clone(), None, "mp4-h264", None)
             .await
             .unwrap();
         std::fs::remove_file(&src).unwrap();
-        e.engine.stop(1).unwrap(); // 슬롯을 비워 변환 작업을 시작시킨다
+        e.engine.stop(1).unwrap(); // frees the slot so the transcode job starts
         wait_for(&e.engine, |jobs| {
             matches!(jobs[1].state, JobState::Failed(_))
         })
@@ -1423,7 +1423,7 @@ mod tests {
         let e = env("sleep 30", 1);
         let bin = e.d.path().join("bin");
         let marker = e.d.path().join("second-run");
-        // 첫 실행: 출력에 "partial" 을 쓰고 대기. 두 번째(marker 있음): 정상 완료.
+        // First run: write "partial" to the output and wait. Second (marker present): complete normally.
         testutil::script(
             &bin,
             "ffmpeg",
@@ -1440,7 +1440,7 @@ mod tests {
         wait_for(&e.engine, |jobs| jobs[0].state == JobState::Encoding).await;
         let pkg = e.engine.list()[0].work_dir.clone().unwrap();
         e.engine.stop(1).unwrap();
-        // 이전 태스크가 정말 끝날 때까지(실행 맵이 빌 때까지) 기다린다.
+        // Wait until the previous task has really ended (the running map is empty).
         wait_for(&e.engine, |_| {
             e.engine.0.running.lock().unwrap().is_empty() && !e.engine.has_active()
         })

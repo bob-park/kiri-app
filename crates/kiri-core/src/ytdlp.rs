@@ -1,4 +1,4 @@
-//! yt-dlp 호출 인자와 출력 파서. 프로세스 실행은 runner 가 맡는다.
+//! yt-dlp arguments and output parsers. `runner` runs the process.
 use crate::model::{JobOptions, Tools};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,7 +14,7 @@ const HOSTS: [&str; 5] = [
     "youtu.be",
 ];
 
-/// http(s) 이고 호스트가 YouTube 이며 경로가 있는 URL.
+/// An http(s) URL with a YouTube host and a path.
 pub fn is_youtube_url(s: &str) -> bool {
     let s = s.trim();
     let Some(rest) = s
@@ -39,7 +39,7 @@ pub struct Quality {
     pub height: u32,
     pub fps: Option<u32>,
     pub vcodec: String,
-    /// 예상 용량 (비디오 + bestaudio)
+    /// Estimated size (video + bestaudio)
     pub filesize: Option<u64>,
     pub label: String,
 }
@@ -51,7 +51,7 @@ pub struct VideoInfo {
     pub channel: Option<String>,
     pub duration_secs: Option<f64>,
     pub thumbnail: Option<String>,
-    /// 높은 화질부터
+    /// Highest quality first
     pub qualities: Vec<Quality>,
     pub subtitles: Vec<String>,
     pub auto_subtitles: Vec<String>,
@@ -111,7 +111,7 @@ pub fn parse_probe(json: &str) -> Result<VideoInfo, String> {
         .max_by(|a, b| num(a, "abr").total_cmp(&num(b, "abr")))
         .and_then(size);
 
-    // (해상도, fps) 마다 tbr 가 가장 높은 포맷 하나
+    // one format per (height, fps): the one with the highest tbr
     let mut best: Vec<(Quality, f64)> = Vec::new();
     for f in formats.iter().filter(|f| is_video(f)) {
         let height = f["height"].as_u64().unwrap_or(0) as u32;
@@ -157,8 +157,8 @@ pub fn parse_probe(json: &str) -> Result<VideoInfo, String> {
     })
 }
 
-/// "best" | "audio" | "<N>p". 같은 높이가 없으면 그보다 낮은 것 중 최고, 그것도 없으면 가장 낮은 것.
-/// Ok(None) 은 오디오만.
+/// "best" | "audio" | "<N>p". Without that exact height: the best one below it, else the lowest.
+/// Ok(None) means audio only.
 pub fn resolve_quality(qualities: &[Quality], want: &str) -> Result<Option<Quality>, String> {
     match want {
         "audio" => Ok(None),
@@ -177,7 +177,7 @@ pub fn resolve_quality(qualities: &[Quality], want: &str) -> Result<Option<Quali
     }
 }
 
-/// 요청 언어 중 수동 자막이 있으면 그것을, 없으면 자동 생성 자막을 고른다. 둘 다 없으면 버린다.
+/// Per requested language: manual subtitles if present, else auto-generated ones, else dropped.
 pub fn pick_subtitles(info: &VideoInfo, langs: &[String]) -> (Vec<String>, bool) {
     let mut out = Vec::new();
     let mut auto = false;
@@ -212,7 +212,7 @@ pub fn download_args(url: &str, o: &JobOptions, tools: &Tools, out_dir: &Path) -
         Some(id) if !o.preset.is_audio_only() => format!("{id}+bestaudio/{id}"),
         _ => "bestaudio".into(),
     };
-    // ffmpeg·ffprobe 가 같은 디렉터리에 있으므로 디렉터리를 넘긴다.
+    // ffmpeg and ffprobe share a directory, so pass the directory.
     let ffmpeg_dir = tools
         .ffmpeg
         .parent()
@@ -261,9 +261,9 @@ pub struct Progress {
     pub eta: Option<String>,
 }
 
-/// PROGRESS_TEMPLATE 이 찍은 줄만 해석한다.
-/// HLS 처럼 조각으로 받을 때 yt-dlp 의 퍼센트는 추정 전체 크기로 계산돼 오르내리므로,
-/// 조각 수가 있으면 받은 조각 / 전체 조각을 쓴다.
+/// Parses only lines printed by PROGRESS_TEMPLATE.
+/// For fragmented downloads (HLS) yt-dlp computes the percent from an estimated total, so it
+/// jumps around; with fragment counts, fragments done / total is used instead.
 pub fn parse_progress(line: &str) -> Option<Progress> {
     let rest = line.trim().strip_prefix("KIRI|")?;
     let mut parts = rest.split('|');
@@ -279,7 +279,7 @@ pub fn parse_progress(line: &str) -> Option<Progress> {
             .filter(|s| !s.is_empty() && !s.starts_with("Unknown") && *s != "N/A" && *s != "NA")
             .map(String::from)
     };
-    // 속도는 바이트/초 원시값으로 받아 MB/s(1,000,000 단위)로 표시한다.
+    // Speed arrives as raw bytes/s and is shown as MB/s (units of 1,000,000).
     let speed = parts
         .next()
         .and_then(|v| v.trim().parse::<f64>().ok())
@@ -297,7 +297,7 @@ pub fn parse_progress(line: &str) -> Option<Progress> {
     })
 }
 
-/// 영상+오디오를 따로 받으면 2, 아니면 1.
+/// 2 when video and audio are downloaded separately, else 1.
 pub fn expected_streams(o: &JobOptions) -> usize {
     if o.format_id.is_some() && !o.preset.is_audio_only() {
         2
@@ -310,8 +310,8 @@ const SUBTITLE_EXT: [&str; 9] = [
     "vtt", "srt", "ttml", "srv1", "srv2", "srv3", "json3", "ass", "lrc",
 ];
 
-/// yt-dlp 출력 전체를 받아 되돌아가지 않는 다운로드 진행률을 만든다.
-/// 자막 파일 진행률은 무시하고, 영상+오디오는 0~95% / 95~100% 로 이어 붙인다.
+/// Turns the whole yt-dlp output into download progress that never goes backwards.
+/// Subtitle progress is ignored; video + audio are chained as 0–95% / 95–100%.
 pub struct ProgressTracker {
     streams: usize,
     media: usize,
@@ -423,12 +423,12 @@ mod tests {
     fn parses_qualities_best_per_resolution() {
         let q = parse_probe(FIXTURE).unwrap().qualities;
         let ids: Vec<_> = q.iter().map(|q| q.format_id.as_str()).collect();
-        assert_eq!(ids, vec!["299", "136", "18"]); // 높은 tbr 승, 스토리보드·오디오 제외
+        assert_eq!(ids, vec!["299", "136", "18"]); // higher tbr wins; storyboards and audio excluded
         assert_eq!(q[0].label, "1080p60");
         assert_eq!(q[1].label, "720p");
         assert_eq!(q[0].vcodec, "AVC");
-        assert_eq!(q[0].filesize, Some(85_000_000 + 3_000_000)); // 비디오 + bestaudio
-        assert_eq!(q[2].filesize, Some(20_000_000)); // 오디오 포함 포맷은 더하지 않음
+        assert_eq!(q[0].filesize, Some(85_000_000 + 3_000_000)); // video + bestaudio
+        assert_eq!(q[2].filesize, Some(20_000_000)); // formats with audio are not summed
     }
 
     #[test]
@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(id("1080p").as_deref(), Some("299"));
         assert_eq!(id("720p").as_deref(), Some("136"));
         assert_eq!(id("480p").as_deref(), Some("18"));
-        assert_eq!(id("144p").as_deref(), Some("18")); // 더 낮은 게 없으면 가장 낮은 것
+        assert_eq!(id("144p").as_deref(), Some("18")); // nothing lower: the lowest one
         assert_eq!(id("audio"), None);
         assert!(resolve_quality(&q, "hd").is_err());
     }
@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn fragment_counts_win_over_estimated_percent() {
-        // HLS: 퍼센트는 추정 크기로 계산돼 출렁인다. 조각 수가 있으면 그것을 쓴다.
+        // HLS: the percent uses an estimated size and fluctuates. Fragment counts win.
         let p = parse_progress("KIRI| 21.7%|1000000|00:10|10|41").unwrap();
         assert!((p.fraction - 10.0 / 41.0).abs() < 1e-4);
         let manifest = parse_progress("KIRI|100.0%|Unknown B/s|NA|0|41").unwrap();
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn tracker_never_goes_backwards_on_hls() {
-        // 실제 4K HLS 다운로드에서 잡은 줄 (퍼센트가 25.2 → 21.7 로 떨어진다)
+        // lines captured from a real 4K HLS download (the percent drops 25.2 → 21.7)
         let mut t = ProgressTracker::new(1);
         let lines = [
             "[download] Destination: /tmp/v.f625.mp4",

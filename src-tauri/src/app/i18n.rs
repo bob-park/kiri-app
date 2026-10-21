@@ -1,31 +1,27 @@
-//! Rust 쪽에서 직접 그리는 문구(메뉴 막대, 네이티브 대화상자, 창 제목).
+//! Text Rust draws itself: the menu bar, native dialogs and window titles.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lang {
     Ko,
     En,
-    Ja,
 }
 
 pub fn resolve(pref: &str) -> Lang {
     resolve_with(pref, sys_locale::get_locale().as_deref())
 }
 
+/// `ko` and `en` are explicit choices. Anything else (`system`, the dropped `ja`,
+/// unknown values) follows the OS language: `ko*` is Korean, everything else English.
 pub fn resolve_with(pref: &str, system: Option<&str>) -> Lang {
-    let code = if pref == "system" {
-        system.unwrap_or("en")
-    } else {
-        pref
-    };
-    match code
-        .split(['-', '_'])
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .as_str()
-    {
+    match pref {
         "ko" => Lang::Ko,
-        "ja" => Lang::Ja,
+        "en" => Lang::En,
+        _ if system
+            .and_then(|s| s.split(['-', '_']).next())
+            .is_some_and(|code| code.eq_ignore_ascii_case("ko")) =>
+        {
+            Lang::Ko
+        }
         _ => Lang::En,
     }
 }
@@ -34,10 +30,10 @@ pub struct Labels {
     pub open: &'static str,
     pub quit: &'static str,
     pub check_update: &'static str,
-    /// `{}` 자리에 버전
+    /// `{}` is the version.
     pub install_update: &'static str,
     pub idle: &'static str,
-    /// `{n}` 실행 중 개수, `{p}` 평균 진행률
+    /// `{n}` is the number of running jobs, `{p}` their average progress.
     pub active: &'static str,
     pub settings_title: &'static str,
     pub quit_title: &'static str,
@@ -74,19 +70,6 @@ pub fn labels(lang: Lang) -> Labels {
             quit_ok: "Quit",
             quit_cancel: "Cancel",
         },
-        Lang::Ja => Labels {
-            open: "kiri を開く",
-            quit: "終了",
-            check_update: "アップデートを確認",
-            install_update: "v{} をインストール",
-            idle: "待機中のジョブはありません",
-            active: "実行中 {n} 件 · {p}%",
-            settings_title: "kiri 設定",
-            quit_title: "kiri を終了しますか？",
-            quit_message: "ダウンロード中です。次回起動時に再開します。",
-            quit_ok: "終了",
-            quit_cancel: "キャンセル",
-        },
     }
 }
 
@@ -106,17 +89,21 @@ mod tests {
 
     #[test]
     fn resolves_language() {
-        assert_eq!(resolve_with("ja", Some("ko-KR")), Lang::Ja);
         assert_eq!(resolve_with("system", Some("ko-KR")), Lang::Ko);
         assert_eq!(resolve_with("system", Some("de")), Lang::En);
         assert_eq!(resolve_with("system", None), Lang::En);
     }
 
     #[test]
+    fn ja_pref_follows_system() {
+        assert_eq!(resolve_with("ja", Some("ko-KR")), Lang::Ko);
+        assert_eq!(resolve_with("ja", Some("fr")), Lang::En);
+    }
+
+    #[test]
     fn labels_are_localized() {
         assert_eq!(labels(Lang::Ko).quit, "종료");
         assert_eq!(labels(Lang::En).open, "Open kiri");
-        assert_eq!(labels(Lang::Ja).idle, "待機中のジョブはありません");
         assert!(labels(Lang::Ko).active.contains("{n}") && labels(Lang::Ko).active.contains("{p}"));
     }
 }

@@ -31,6 +31,6 @@ pub fn patch_and_notify(app: &AppHandle, patch: &Value) -> AppResult<Settings> {
     if let Some(engine) = app.try_state::<Engine>() {
         engine.set_config(super::engine_config(&next));
     }
-    crate::tray::relabel(app, &next); // no-op until the tray exists
+    crate::app::tray::relabel(app, &next); // no-op until the tray exists
     Ok(next)
 }

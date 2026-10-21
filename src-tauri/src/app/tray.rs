@@ -1,7 +1,11 @@
+//! The menu-bar tray icon and menu, and the macOS app menu.
+
 use crate::{
+    app::{
+        i18n::{self, Labels},
+        updater, windows,
+    },
     domain::settings::Settings,
-    i18n::{self, Labels},
-    windows,
 };
 use kiri_core::{engine::Engine, model::Job};
 use std::{
@@ -15,7 +19,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
-/// macOS 에서 Tauri 가 DoubleClick 을 내지 않으므로 왼쪽 클릭 두 번을 직접 판정한다.
+/// Tauri emits no DoubleClick on macOS, so two left clicks are matched here.
 #[derive(Default)]
 pub struct DoubleClick {
     last: Mutex<Option<Instant>>,
@@ -55,32 +59,31 @@ pub struct TrayItems {
     pub open: MenuItem<Wry>,
     pub update: MenuItem<Wry>,
     pub quit: MenuItem<Wry>,
-    /// 앱 메뉴의 종료(⌘Q)
+    /// Quit in the app menu (⌘Q)
     pub app_quit: MenuItem<Wry>,
 }
 
-fn update_label(l: &Labels, pending: Option<crate::updater::UpdateInfo>) -> String {
+fn update_label(l: &Labels, pending: Option<updater::UpdateInfo>) -> String {
     match pending {
         Some(info) => l.install_update.replace("{}", &info.version),
         None => l.check_update.to_string(),
     }
 }
 
-/// 업데이트 확인이 끝날 때마다.
+/// After every update check.
 pub fn relabel_update(app: &AppHandle) {
     let Some(items) = app.try_state::<TrayItems>() else {
         return;
     };
-    let _ = items.update.set_text(update_label(
-        &i18n::current(app),
-        crate::updater::status(app),
-    ));
+    let _ = items
+        .update
+        .set_text(update_label(&i18n::current(app), updater::status(app)));
 }
 
-/// 설정이 저장될 때. 트레이가 아직 없으면 아무것도 하지 않는다.
+/// When settings are saved. A no-op until the tray exists.
 pub fn relabel(app: &AppHandle, settings: &Settings) {
     let l = i18n::labels(i18n::resolve(&settings.general.ui_language));
-    if let Some(w) = app.get_webview_window(crate::windows::SETTINGS) {
+    if let Some(w) = app.get_webview_window(windows::SETTINGS) {
         let _ = w.set_title(l.settings_title);
     }
     let Some(items) = app.try_state::<TrayItems>() else {
@@ -89,7 +92,7 @@ pub fn relabel(app: &AppHandle, settings: &Settings) {
     let _ = items.open.set_text(l.open);
     let _ = items
         .update
-        .set_text(update_label(&l, crate::updater::status(app)));
+        .set_text(update_label(&l, updater::status(app)));
     let _ = items.quit.set_text(l.quit);
     let _ = items.app_quit.set_text(l.quit);
     if let Some(engine) = app.try_state::<Engine>() {
@@ -97,9 +100,10 @@ pub fn relabel(app: &AppHandle, settings: &Settings) {
     }
 }
 
-/// 큐가 바뀔 때. 엔진의 notify 임계 구역 안에서 불리므로 메인 스레드를 기다리지 않는다:
-/// set_text 는 다른 스레드에서 부르면 메인 스레드 완료를 블로킹으로 기다리는데, 메인
-/// 스레드의 동기 커맨드(stop_job 등)가 notify 락을 기다리고 있으면 교착한다.
+/// When the queue changes. Called inside the engine's notify critical section, so it
+/// never waits on the main thread: set_text from another thread blocks until the main
+/// thread runs it, which deadlocks if a sync command there (stop_job, ...) waits on the
+/// notify lock.
 pub fn relabel_queue(app: &AppHandle, jobs: &[Job]) {
     if app.try_state::<TrayItems>().is_none() {
         return;
@@ -113,22 +117,22 @@ pub fn relabel_queue(app: &AppHandle, jobs: &[Job]) {
     });
 }
 
-/// 트레이 메뉴와 앱 메뉴 공용(Builder::on_menu_event). 트레이의 on_menu_event 도 모든
-/// 메뉴 이벤트를 받으므로 한 곳에서만 처리한다.
+/// Shared by the tray menu and the app menu (Builder::on_menu_event). The tray's own
+/// on_menu_event also receives every menu event, so they are handled here only.
 pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id.as_ref() {
         "open" => {
             let _ = windows::show_main(app);
         }
-        "update" => crate::updater::on_tray_click(app.clone()),
-        // ExitRequested 를 거쳐 종료 확인을 받는다.
+        "update" => updater::on_tray_click(app.clone()),
+        // Goes through ExitRequested, so the quit confirmation applies.
         "quit" => app.exit(0),
         _ => {}
     }
 }
 
-/// 기본 macOS 메뉴와 같되 종료만 직접 만든 항목이다. 기본 Quit(`terminate:`)는
-/// ExitRequested 를 거치지 않아 종료 확인을 건너뛴다.
+/// The default macOS menu, except Quit is our own item. The default Quit (`terminate:`)
+/// skips ExitRequested and with it the quit confirmation.
 fn app_menu(app: &AppHandle, quit: &MenuItem<Wry>) -> tauri::Result<tauri::menu::Menu<Wry>> {
     let app_sub = SubmenuBuilder::new(app, app.package_info().name.clone())
         .about(None)
@@ -167,7 +171,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let update = MenuItem::with_id(
         app,
         "update",
-        update_label(&l, crate::updater::status(app)),
+        update_label(&l, updater::status(app)),
         true,
         None::<&str>,
     )?;
@@ -183,12 +187,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let clicks = DoubleClick::default();
     TrayIconBuilder::with_id("main")
         .icon(Image::from_bytes(include_bytes!(
-            "../icons/tray-template.png"
+            "../../icons/tray-template.png"
         ))?)
         .icon_as_template(true)
         .tooltip("kiri")
         .menu(&menu)
-        .show_menu_on_left_click(false) // 왼쪽 클릭은 더블클릭 판정용, 메뉴는 우클릭
+        .show_menu_on_left_click(false) // left click is for double-click, the menu is on right click
         .on_tray_icon_event(move |tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -253,8 +257,8 @@ mod tests {
         let t0 = Instant::now();
         assert!(!d.click(t0));
         assert!(d.click(t0 + Duration::from_millis(300)));
-        assert!(!d.click(t0 + Duration::from_millis(400))); // 판정 후 초기화
-        assert!(!d.click(t0 + Duration::from_millis(1000))); // 600ms 간격
+        assert!(!d.click(t0 + Duration::from_millis(400))); // reset after a match
+        assert!(!d.click(t0 + Duration::from_millis(1000))); // 600 ms apart
         assert!(d.click(t0 + Duration::from_millis(1350)));
     }
 
@@ -282,7 +286,7 @@ mod tests {
     fn update_label_follows_pending_state() {
         let l = i18n::labels(i18n::Lang::Ko);
         assert_eq!(update_label(&l, None), "업데이트 확인");
-        let info = crate::updater::UpdateInfo {
+        let info = updater::UpdateInfo {
             version: "0.2.0".into(),
             notes: String::new(),
             ready: false,

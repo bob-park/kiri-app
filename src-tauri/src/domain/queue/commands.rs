@@ -1,12 +1,23 @@
 //! Tauri adapters for the queue domain. The engine owns the queue; these just call it.
 
 use super::{Job, NewJob};
-use crate::shared::error::AppResult;
+use crate::{
+    app::{tray, updater},
+    shared::error::AppResult,
+};
 use kiri_core::{engine::Engine, ytdlp::VideoInfo};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
-/// Payload: the full job list. Emitted by the engine listener in `lib.rs`.
+/// Payload: the full job list. Emitted by `on_change`.
 pub const QUEUE_CHANGED: &str = "queue://changed";
+
+/// The engine's change listener, called serially. Calling an Engine mutator here
+/// deadlocks, so this only emits and does tray work that never waits on the main thread.
+pub fn on_change(app: &AppHandle, jobs: &[Job]) {
+    let _ = app.emit(QUEUE_CHANGED, jobs);
+    tray::relabel_queue(app, jobs);
+    updater::on_queue_change(app, jobs);
+}
 
 #[tauri::command]
 pub fn list_jobs(engine: State<'_, Engine>) -> AppResult<Vec<Job>> {

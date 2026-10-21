@@ -1,4 +1,4 @@
-//! kiri CLI: 실행 중인 kiri 앱의 큐를 조회·제어한다.
+//! kiri CLI: inspects and controls the queue of the running kiri app.
 use clap::{Parser, Subcommand};
 use kiri_core::{
     ipc::{self, ClientError, Request, Response},
@@ -61,7 +61,7 @@ enum Cmd {
 }
 
 impl Cmd {
-    /// Err 는 앱에 보내기 전의 요청 오류(종료 코드 1).
+    /// Err is a request error caught before sending to the app (exit code 1).
     fn into_request(self) -> Result<Request, String> {
         Ok(match self {
             Cmd::Status => Request::Status,
@@ -159,7 +159,7 @@ fn format_jobs(jobs: &[Job]) -> String {
         .join("\n")
 }
 
-/// 응답 출력 후 종료 코드.
+/// Prints the response and returns the exit code.
 fn print_response(resp: &Response, json: bool) -> ExitCode {
     if json {
         println!(
@@ -343,9 +343,9 @@ mod tests {
                 quality: Some("720p".into()),
             }
         );
-        // --format 은 필수
+        // --format is required
         assert!(Cli::try_parse_from(["kiri", "transcode", "a.mkv"]).is_err());
-        // 없는 원본은 앱에 보내기 전에 거부
+        // a missing source is rejected before reaching the app
         let cli =
             Cli::try_parse_from(["kiri", "transcode", "/nope/x.mkv", "--format", "mp3"]).unwrap();
         assert_eq!(

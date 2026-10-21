@@ -4,6 +4,12 @@ import { api } from "./tauri";
 import { showError } from "./toast";
 import type { UpdateInfo, UpdateProgress } from "./types";
 
+type UpdateStatus =
+  | ({ kind: "available" | "ready" } & UpdateInfo)
+  | ({ kind: "progress" } & UpdateProgress)
+  | { kind: "download_failed" | "error"; error: string }
+  | { kind: "scheduled" };
+
 export type UpdatePhase = "idle" | "downloading" | "ready" | "failed" | "scheduled" | "installing";
 export type UpdateEvent =
   | { type: "found"; info: UpdateInfo }
@@ -101,22 +107,27 @@ export const useUpdate = create<UpdateStore>((set, get) => {
     },
     subscribe: () => {
       api.updateStatus().then((info) => info && !get().info && found(info)).catch(() => {});
-      const subs = [
-        listen<UpdateInfo>("update-available", (e) => found(e.payload)),
-        listen<UpdateProgress>("update-progress", (e) => {
-          set({ progress: e.payload });
-          step({ type: "progress" });
-        }),
-        listen<UpdateInfo>("update-ready", (e) => {
-          set({ info: e.payload, progress: null });
-          step({ type: "ready" });
-        }),
-        listen<string>("update-download-failed", () => step({ type: "downloadFailed" })),
-        listen<boolean>("update-scheduled", () => step({ type: "scheduled" })),
-        listen<string>("update-error", (e) => installFailed(e.payload)),
-      ];
+      // Compat shim for the single `update://status` event; the legacy store is rewritten later.
+      const sub = listen<UpdateStatus>("update://status", ({ payload: s }) => {
+        switch (s.kind) {
+          case "available":
+            return found(s);
+          case "progress":
+            set({ progress: s });
+            return step({ type: "progress" });
+          case "ready":
+            set({ info: s, progress: null });
+            return step({ type: "ready" });
+          case "download_failed":
+            return step({ type: "downloadFailed" });
+          case "scheduled":
+            return step({ type: "scheduled" });
+          case "error":
+            return installFailed(s.error);
+        }
+      });
       return () => {
-        for (const p of subs) p.then((un) => un()).catch(() => {});
+        sub.then((un) => un()).catch(() => {});
       };
     },
   };

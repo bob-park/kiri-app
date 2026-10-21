@@ -13,7 +13,7 @@ export const useTools = create<ToolsStore>((set) => ({
   bind: () => {
     // 이벤트가 invoke 보다 먼저 올 수 있다. 비어 있을 때만 채운다.
     api.toolsStatus().then((s) => set((cur) => ({ status: cur.status ?? s }))).catch(() => {});
-    const p = listen<ToolsStatus>("tools-changed", (e) => set({ status: e.payload }));
+    const p = listen<ToolsStatus>("tools://changed", (e) => set({ status: e.payload }));
     return () => {
       p.then((un) => un());
     };

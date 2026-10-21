@@ -1,4 +1,4 @@
-//! 큐와 CLI 가 함께 쓰는 작업 모델. serde 표현이 곧 프론트엔드·CLI 계약이다.
+//! Job model shared by the queue and the CLI. Its serde form is the frontend/CLI contract.
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -45,7 +45,7 @@ impl Preset {
         matches!(self, Preset::Mp3 | Preset::M4a)
     }
 
-    /// 재인코딩 결과 확장자. 원본 유지는 인코딩하지 않으므로 None.
+    /// Extension of the re-encoded output. Original is not encoded, so None.
     pub fn extension(self) -> Option<&'static str> {
         match self {
             Preset::Original => None,
@@ -71,7 +71,7 @@ impl fmt::Display for Preset {
     }
 }
 
-/// 작업이 다루는 대상: YouTube 링크를 받거나, 로컬 파일을 변환한다.
+/// What a job works on: download a YouTube link, or convert a local file.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum JobSource {
@@ -80,7 +80,7 @@ pub enum JobSource {
     },
     File {
         path: PathBuf,
-        /// None = 원본과 같은 폴더
+        /// None = the source file's folder
         #[serde(default)]
         output_dir: Option<PathBuf>,
     },
@@ -88,13 +88,13 @@ pub enum JobSource {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct JobOptions {
-    /// 비디오 format_id. None 이면 오디오만 받는다.
+    /// Video format_id. None downloads audio only.
     pub format_id: Option<String>,
     pub preset: Preset,
     pub subtitles: Vec<String>,
-    /// subtitles 중 자동 생성 자막이 섞여 있으면 true (--write-auto-subs).
+    /// True if `subtitles` includes auto-generated ones (--write-auto-subs).
     pub auto_subtitles: bool,
-    /// 변환 해상도 상한(높이). None 이면 원본 해상도.
+    /// Max output height. None keeps the source resolution.
     #[serde(default)]
     pub max_height: Option<u32>,
 }
@@ -111,11 +111,11 @@ pub enum JobState {
 }
 
 impl JobState {
-    /// 프로세스가 돌고 있는 상태.
+    /// A process is running.
     pub fn is_active(&self) -> bool {
         matches!(self, JobState::Downloading | JobState::Encoding)
     }
-    /// 아직 끝나지 않은 상태(대기 포함).
+    /// Not finished yet (queued included).
     pub fn is_pending(&self) -> bool {
         matches!(self, JobState::Queued) || self.is_active()
     }
@@ -130,12 +130,12 @@ pub struct Job {
     pub thumbnail: Option<String>,
     #[serde(default)]
     pub duration_secs: Option<f64>,
-    /// 화면 표시용 화질 ("1080p60", 오디오만이면 "audio").
+    /// Quality for display ("1080p60", or "audio" for audio only).
     #[serde(default)]
     pub quality_label: String,
     pub options: JobOptions,
     pub state: JobState,
-    /// 현재 단계 기준 0.0~1.0
+    /// 0.0–1.0 within the current stage
     #[serde(default)]
     pub progress: f32,
     #[serde(default)]
@@ -144,7 +144,7 @@ pub struct Job {
     pub eta: Option<String>,
     #[serde(default)]
     pub output: Option<PathBuf>,
-    /// 받는 중인 파일을 모아 두는 `<저장 폴더>/<제목>.kiripart` 패키지. 처음 시작할 때 정한다.
+    /// The `<save folder>/<title>.kiripart` package holding in-progress files. Chosen on first start.
     #[serde(default)]
     pub work_dir: Option<PathBuf>,
     /// unix epoch milliseconds
@@ -153,7 +153,7 @@ pub struct Job {
 }
 
 impl Job {
-    /// 결과물이 놓일 폴더. 파일 변환은 지정 폴더(없으면 원본 폴더), 다운로드는 저장 폴더.
+    /// Where the output goes: for conversions the chosen folder (else the source's), for downloads the save folder.
     pub fn result_dir(&self, download_dir: &Path) -> PathBuf {
         match &self.source {
             JobSource::Youtube { .. } => download_dir.to_path_buf(),
@@ -165,7 +165,7 @@ impl Job {
     }
 }
 
-/// 큐에 넣을 작업. UI 는 probe 결과로, CLI 는 Engine::add_url 이 만든다.
+/// A job to enqueue. The UI builds it from a probe; for the CLI, Engine::add_url does.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NewJob {
     pub source: JobSource,
@@ -176,7 +176,7 @@ pub struct NewJob {
     pub options: JobOptions,
 }
 
-/// 외부 실행 파일 위치. 테스트는 가짜 스크립트 경로를 넣는다.
+/// External executable paths. Tests pass fake script paths.
 #[derive(Clone, Debug)]
 pub struct Tools {
     pub ytdlp: PathBuf,

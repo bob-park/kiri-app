@@ -1,4 +1,4 @@
-//! CLI ↔ 앱. 연결당 요청 한 줄, 응답 한 줄 (JSON + \n).
+//! CLI ↔ app. One request line and one response line per connection (JSON + \n).
 use crate::{
     engine::{Engine, EngineError},
     model::Job,
@@ -14,7 +14,7 @@ use tokio::{
     net::{UnixListener, UnixStream},
 };
 
-/// v2: 작업 JSON 의 `url` 이 `source` 로 바뀌고 `transcode` 요청이 생겼다.
+/// v2: the job JSON's `url` became `source`, and the `transcode` request was added.
 pub const PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -43,7 +43,7 @@ pub enum Request {
     Stop {
         id: u64,
     },
-    /// 로컬 파일 변환. 경로는 절대 경로여야 한다(CLI 가 바꿔 보낸다).
+    /// Transcode a local file. The path must be absolute (the CLI resolves it).
     Transcode {
         source: String,
         #[serde(default)]
@@ -82,9 +82,9 @@ pub fn socket_path() -> PathBuf {
     home.join("Library/Application Support/org.bobpark.kiri/kiri.sock")
 }
 
-/// 다른 인스턴스가 응답하면 AddrInUse. 응답 없는 파일은 지우고 다시 바인드한다.
-/// ponytail: connect 성공을 생존 신호로 쓴다. 죽은 직후의 소켓 fd 사본을 fork 중인
-/// 자식이 exec 전까지 들고 있는 찰나에는 살아 있어 보인다 — 다음 실행에서 풀린다.
+/// AddrInUse if another instance answers. A socket file nobody answers on is removed and rebound.
+/// ponytail: a successful connect counts as alive. For the instant a forking child holds a
+/// copy of a just-dead socket fd before exec, it looks alive; the next launch recovers.
 pub async fn bind(path: &Path) -> io::Result<UnixListener> {
     if UnixStream::connect(path).await.is_ok() {
         return Err(io::Error::new(
@@ -108,11 +108,11 @@ pub async fn serve(listener: UnixListener, engine: Engine) {
                 let engine = engine.clone();
                 tokio::spawn(async move {
                     if let Err(e) = handle_conn(stream, engine).await {
-                        eprintln!("kiri ipc: {e}");
+                        log::warn!("ipc connection failed: {e}");
                     }
                 });
             }
-            Err(e) => eprintln!("kiri ipc: accept failed: {e}"),
+            Err(e) => log::warn!("ipc accept failed: {e}"),
         }
     }
 }
@@ -392,10 +392,10 @@ mod tests {
     async fn bind_replaces_stale_socket_file() {
         let d = tempfile::tempdir().unwrap();
         let path = d.path().join("kiri.sock");
-        // 여기서 리스너를 bind 했다 drop 하면 안 된다: 같은 프로세스의 다른 테스트가
-        // 그 사이 fork 하면 자식이 fd 사본을 들고(CLOEXEC 은 exec 때 닫는다) 닫은
-        // 소켓을 잠시 살려 둬, bind 의 connect 탐색이 "다른 인스턴스가 있다"로 본다.
-        // 전제는 "서버 없는 파일"이므로 파일만 만든다.
+        // Do not bind and drop a listener here: if another test in this process forks
+        // meanwhile, the child holds an fd copy (CLOEXEC closes it only at exec) and keeps
+        // the closed socket alive briefly, so bind's connect probe sees "another instance".
+        // The premise is "a file with no server", so only the file is created.
         std::fs::write(&path, b"").unwrap();
         bind(&path).await.unwrap();
         assert!(std::fs::metadata(&path).unwrap().file_type().is_socket());
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn socket_path_env_override() {
-        // 다른 테스트와 env 를 공유하므로 이 테스트 안에서만 설정·해제한다.
+        // The env is shared with other tests, so set and unset it within this test only.
         unsafe { std::env::set_var("KIRI_SOCKET", "/tmp/x.sock") };
         assert_eq!(socket_path(), PathBuf::from("/tmp/x.sock"));
         unsafe { std::env::remove_var("KIRI_SOCKET") };

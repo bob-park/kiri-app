@@ -1,6 +1,11 @@
-//! /usr/local/bin/kiri → 번들 안 kiri-cli 심볼릭 링크.
+//! The /usr/local/bin/kiri → bundled kiri-cli symlink, and its commands.
+use crate::{
+    app::{ipc_server::IpcState, sidecar},
+    shared::error::{AppError, AppResult},
+};
 use serde::Serialize;
 use std::{fs, io, path::Path, process::Command};
+use tauri::State;
 
 pub const LINK: &str = "/usr/local/bin/kiri";
 
@@ -16,7 +21,7 @@ pub fn is_installed(target: &Path, link: &Path) -> bool {
     fs::read_link(link).is_ok_and(|p| p == target)
 }
 
-/// AppleScript 문자열 안의 sh 명령에 넣을 경로. 따옴표·역슬래시가 있으면 거부한다.
+/// A path for an sh command inside an AppleScript string. Quotes and backslashes are rejected.
 pub fn shell_quote(p: &Path) -> Result<String, String> {
     let s = p.to_str().ok_or("non-UTF-8 path")?;
     if s.contains(['\'', '"', '\\']) {
@@ -25,12 +30,12 @@ pub fn shell_quote(p: &Path) -> Result<String, String> {
     Ok(format!("'{s}'"))
 }
 
-/// osascript 관리자 암호 창에서 "취소"를 누른 경우.
+/// The user pressed "Cancel" in the osascript administrator password prompt.
 fn is_cancel(stderr: &str) -> bool {
     stderr.contains("(-128)")
 }
 
-/// 사용자가 암호 창을 취소하면 아무 일도 없었던 것으로 본다.
+/// A cancelled password prompt counts as nothing having happened.
 fn admin(sh: &str) -> Result<(), String> {
     let script = format!("do shell script \"{sh}\" with administrator privileges");
     let out = Command::new("osascript")
@@ -52,7 +57,8 @@ fn needs_admin(e: &io::Error) -> bool {
     )
 }
 
-/// 이미 있는 링크가 kiri 것인가: target 을 가리키거나, 앱을 옮겨 낡은 kiri-cli 링크.
+/// Whether an existing link is kiri's: it points at `target`, or is a stale kiri-cli link
+/// left behind by moving the app.
 fn is_ours(target: &Path, link: &Path) -> bool {
     fs::read_link(link).is_ok_and(|p| p == target || p.file_name() == Some("kiri-cli".as_ref()))
 }
@@ -90,7 +96,7 @@ fn admin_link(target: &Path, link: &Path, e: &io::Error) -> Result<(), String> {
     ))
 }
 
-/// kiri 가 만든 링크만 지운다. 다른 곳을 가리키는 링크·파일은 건드리지 않는다.
+/// Removes only kiri's link. Links pointing elsewhere and regular files are left alone.
 pub fn uninstall(target: &Path, link: &Path) -> Result<(), String> {
     if fs::symlink_metadata(link).is_err() {
         return Ok(());
@@ -108,6 +114,35 @@ pub fn uninstall(target: &Path, link: &Path) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+pub fn cli_status(ipc: State<'_, IpcState>) -> AppResult<CliStatus> {
+    let target = sidecar("kiri-cli");
+    Ok(CliStatus {
+        installed: is_installed(&target, Path::new(LINK)),
+        link: LINK.into(),
+        target: target.display().to_string(),
+        socket_error: ipc.0.lock().unwrap().clone(),
+    })
+}
+
+/// Runs on a blocking thread so the osascript password prompt never blocks the main thread.
+async fn blocking(f: impl FnOnce() -> Result<(), String> + Send + 'static) -> AppResult<()> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::Failed(e.to_string()))?
+        .map_err(AppError::Failed)
+}
+
+#[tauri::command]
+pub async fn install_cli() -> AppResult<()> {
+    blocking(|| install(&sidecar("kiri-cli"), Path::new(LINK))).await
+}
+
+#[tauri::command]
+pub async fn uninstall_cli() -> AppResult<()> {
+    blocking(|| uninstall(&sidecar("kiri-cli"), Path::new(LINK))).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,10 +157,10 @@ mod tests {
         assert!(!is_installed(&target, &link));
         install(&target, &link).unwrap();
         assert!(is_installed(&target, &link));
-        install(&target, &link).unwrap(); // 다시 설치해도 된다
+        install(&target, &link).unwrap(); // reinstalling is fine
         uninstall(&target, &link).unwrap();
         assert!(!is_installed(&target, &link));
-        uninstall(&target, &link).unwrap(); // 없으면 성공
+        uninstall(&target, &link).unwrap(); // missing link succeeds
     }
 
     #[test]

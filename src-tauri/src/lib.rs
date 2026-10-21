@@ -1,48 +1,31 @@
-mod app;
-mod bootstrap;
-mod cli_install;
-mod commands;
-mod domain;
-mod i18n;
-mod ipc_server;
-#[cfg(test)]
-mod pubkey_check;
-mod quit;
-mod shared;
-mod tray;
-mod updater;
-mod windows;
+//! Assembly: plugins, setup and the command handler. Logic lives in `app/`, `domain/` and `shared/`.
 
-use app::state::AppState;
-use domain::{queue, settings};
+mod app;
+mod domain;
+mod shared;
+
+use app::{cli_install, ipc_server, quit, sidecar, state::AppState, tray, updater, windows};
+use domain::{queue, settings, tools};
 use kiri_core::{
     engine::{Engine, EnginePaths},
-    model::{Job, Tools},
+    model::Tools,
 };
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
-use tauri::{AppHandle, Emitter, Manager};
-
-/// externalBin 은 실행 파일 옆(Contents/MacOS, dev 에서는 target/debug)에 놓인다.
-pub(crate) fn sidecar(name: &str) -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join(name)))
-        .unwrap_or_else(|| PathBuf::from(name))
-}
-
-/// 엔진이 직렬로 부른다. 여기서 Engine 의 변경 메서드를 부르면 교착하므로
-/// emit 과 (메인 스레드를 기다리지 않는) 트레이 갱신만 한다.
-fn on_queue_change(app: &AppHandle, jobs: &[Job]) {
-    let _ = app.emit(queue::commands::QUEUE_CHANGED, jobs);
-    tray::relabel_queue(app, jobs);
-    updater::on_queue_change(app, jobs);
-}
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
+        // Must be first: a second launch only focuses the running app.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Err(e) = windows::show_main(app) {
+                log::warn!("cannot show main window for second launch: {e}");
+            }
+        }))
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -77,12 +60,12 @@ pub fn run() {
             let db = Arc::new(Mutex::new(conn));
             let store = Arc::new(queue::SqliteQueueStore::new(db.clone(), import_ok));
             app.manage(AppState { db });
-            app.manage(bootstrap::ToolsState::default());
+            app.manage(tools::ToolsState::default());
             app.manage(ipc_server::IpcState::default());
             app.manage(updater::UpdateState::default());
 
             let bin = path.app_data_dir()?.join("bin");
-            let tools = Tools {
+            let tool_paths = Tools {
                 ytdlp: bin.join("yt-dlp"),
                 deno: bin.join("deno"),
                 ffmpeg: sidecar("ffmpeg"),
@@ -96,8 +79,8 @@ pub fn run() {
             let config = settings::engine_config(&app.state::<AppState>().settings());
             let rt = tauri::async_runtime::block_on(async { tokio::runtime::Handle::current() });
             let h = handle.clone();
-            let engine = Engine::new(paths, tools, config, rt, move |jobs| {
-                on_queue_change(&h, jobs)
+            let engine = Engine::new(paths, tool_paths, config, rt, move |jobs| {
+                queue::commands::on_change(&h, jobs)
             });
             app.manage(engine.clone());
 
@@ -105,7 +88,7 @@ pub fn run() {
             tray::build(&handle)?;
             engine.start();
             ipc_server::spawn(&handle, engine);
-            bootstrap::spawn(handle.clone());
+            tools::commands::spawn(handle.clone());
             updater::spawn_periodic(handle);
             Ok(())
         })
@@ -121,16 +104,16 @@ pub fn run() {
             queue::commands::remove_job,
             queue::commands::restart_job,
             queue::commands::clear_completed,
-            commands::tools_status,
-            commands::update_tools,
-            commands::update_status,
-            commands::check_update,
-            commands::install_update,
-            commands::retry_update_download,
-            commands::open_settings,
-            commands::cli_status,
-            commands::install_cli,
-            commands::uninstall_cli,
+            tools::commands::tools_status,
+            tools::commands::update_tools,
+            updater::update_status,
+            updater::check_update,
+            updater::install_update,
+            updater::retry_update_download,
+            windows::open_settings,
+            cli_install::cli_status,
+            cli_install::install_cli,
+            cli_install::uninstall_cli,
         ])
         .build(tauri::generate_context!())
         .expect("error while building kiri")
