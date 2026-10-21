@@ -25,9 +25,9 @@ All three crates share the app version, so `kiri --version` matches the app.
 
 - The script validates the version and the argument first. It writes all files or none: after writing, it checks each file and restores the backups on any miss, exiting non-zero.
 - It uses `perl -i`, so it works on macOS and on the Ubuntu runner.
+- It is tested by `scripts/bump-version-up.test.mjs` against fixture copies in a temp dir. Its file lists (`CARGO_TOMLS`, `CRATE_NAMES`) must change when a workspace crate is added or renamed.
 - No `-rcN`/date suffixes: the Tauri updater compares semver, and prerelease tags would break update ordering.
 
-> **Known gap:** the script still carries the template layout — it expects `src-tauri/Cargo.lock` and `CRATE_NAME="template-rust-app"` and does not touch `crates/*/Cargo.toml`. Until it is fixed it exits with "파일을 찾을 수 없습니다" and the workflow fails without bumping. Fix it (in its own PR) before relying on the bump: root `Cargo.lock`, the three crate names, and the two `crates/*/Cargo.toml` files.
 
 ## Workflow (`.github/workflows/bump-version.yml`)
 

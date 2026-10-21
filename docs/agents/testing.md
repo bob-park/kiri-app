@@ -32,7 +32,7 @@ Run node/yarn through mise (`mise exec -- yarn test`). `cargo test -p <crate>` (
 - **Frontend:**
   - Extract decisions into pure functions in `src/utils/` (or `src/shared/i18n/locale.ts`) and test those, e.g. `resolveTheme`, `nextPhase`, `resolveLocale`, `mergeSettings`.
   - Components and hooks are not unit-tested; verify them in the running app.
-- **Scripts:** `scripts/latest-json.test.mjs` covers `latest-json.mjs`.
+- **Scripts:** run them against fixture copies in a temp dir, never the real files. `scripts/latest-json.test.mjs` and `scripts/bump-version-up.test.mjs` are the examples.
 
 ## Constraints
 
