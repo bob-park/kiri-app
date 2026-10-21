@@ -10,10 +10,10 @@ related:
 
 # Zustand Slice Pattern
 
-> Zustand is for **client-only UI state**, such as an open panel, a selection or a draft. Data that lives in Rust/SQLite belongs in React Query, not Zustand. Each domain exposes a `SlicePattern<DomainState, BoundState>` slice that is combined in `rootStore.ts`. `immer` and `devtools` are enabled.
+> Zustand is for **client-only UI state**, such as an open panel, a selection or a draft. Data that lives in Rust/SQLite belongs in React Query, not Zustand. Each domain exposes a `SlicePattern<DomainState, BoundState>` slice that is combined in `rootStore.ts`. `immer` is on; `devtools` is on in dev builds.
 
 - `SlicePattern` comes from a module augmentation in `src/shared/store/types.d.ts` and is imported as if from `zustand`.
-- The skeleton has one slice, a working example: `src/shared/store/error/` (`error.state.ts` + `slice.ts`). It holds the last failed action for `ErrorAlert`. Domain slices go in `src/domain/<name>/store/`. Only cross-cutting UI state lives in `src/shared/store/`.
+- kiri has two slices, both cross-cutting, in `src/shared/store/`: `error/` (the last failed action for `ErrorAlert`) and `toast/` (the toast stack: `pushToast`, `dismissToast`, `dismissToastByKey`). Domain slices go in `src/domain/<name>/store/` (all `.gitkeep` today). Only cross-cutting UI state lives in `src/shared/store/`.
 
 ## Adding a slice
 
@@ -35,8 +35,8 @@ const createNotesSlice: SlicePattern<NotesState, BoundState> = (set) => ({
 export default createNotesSlice;
 
 // src/shared/store/rootStore.ts
-immer((...a) => ({ ...createErrorSlice(...a), ...createNotesSlice(...a) }))
-export type BoundState = ErrorState & NotesState;
+immer((...a) => ({ ...createErrorSlice(...a), ...createToastSlice(...a), ...createNotesSlice(...a) }))
+export type BoundState = ErrorState & ToastState & NotesState;
 ```
 
 ## Rules

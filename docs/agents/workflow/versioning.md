@@ -9,11 +9,13 @@ related:
 
 # Versioning
 
-> Plain semver `X.Y.Z`, starting at `0.0.1`. `src-tauri/tauri.conf.json` is the source of truth. `bump-version-up.sh` keeps four files in sync; **never edit versions by hand**. GitHub Actions runs the bump on every merge into `develop`, and on `hotfix/*` merges into `main`.
+> Plain semver `X.Y.Z`. `src-tauri/tauri.conf.json` is the source of truth. `bump-version-up.sh` keeps every file carrying the version in sync; **never edit versions by hand**. GitHub Actions runs it on every PR merge into `master`.
 
 ## Files carrying the version
 
-`src-tauri/tauri.conf.json` (source of truth) · `package.json` · `src-tauri/Cargo.toml` (`[package]`) · `src-tauri/Cargo.lock` (the `template-rust-app` entry).
+`src-tauri/tauri.conf.json` (source of truth) · `package.json` · `src-tauri/Cargo.toml` (`kiri-app`) · `crates/kiri-core/Cargo.toml` · `crates/kiri-cli/Cargo.toml` · the workspace `Cargo.lock` (entries for the three crates).
+
+All three crates share the app version, so `kiri --version` matches the app.
 
 ## `bump-version-up.sh`
 
@@ -21,32 +23,25 @@ related:
 ./bump-version-up.sh [patch|minor|major]   # default: patch
 ```
 
-- The script validates the version and the argument first. It writes all four files or none: after writing, it checks each file. If one wasn't updated (e.g. `CRATE_NAME` not renamed, so `Cargo.lock` had no match), it restores the backups and exits non-zero.
+- The script validates the version and the argument first. It writes all files or none: after writing, it checks each file and restores the backups on any miss, exiting non-zero.
 - It uses `perl -i`, so it works on macOS and on the Ubuntu runner.
-- It is tested by `scripts/bump-version-up.test.mjs`.
 - No `-rcN`/date suffixes: the Tauri updater compares semver, and prerelease tags would break update ordering.
+
+> **Known gap:** the script still carries the template layout — it expects `src-tauri/Cargo.lock` and `CRATE_NAME="template-rust-app"` and does not touch `crates/*/Cargo.toml`. Until it is fixed it exits with "파일을 찾을 수 없습니다" and the workflow fails without bumping. Fix it (in its own PR) before relying on the bump: root `Cargo.lock`, the three crate names, and the two `crates/*/Cargo.toml` files.
 
 ## Workflow (`.github/workflows/bump-version.yml`)
 
-1. **Trigger:** a push to `develop` or `main`, which happens when a PR merges. The bot's own commit carries `[skip ci]` and is skipped.
-2. **Reading the PR:** the workflow finds the PR number from the merge or squash commit, then reads the PR title, labels and head branch ([pr](pr.md#title)).
-3. **Which merges bump:**
-
-   | Merged into | PR head | Bump? |
-   | ----------- | ------- | ----- |
-   | `develop` | any feature/day-to-day branch | yes |
-   | `develop` | `main` (hotfix back-merge) | no — the hotfix was already bumped on `main` |
-   | `main` | `hotfix/*` | yes — so the hotfix ships as a new version |
-   | `main` | `develop` (release promotion) | no — already bumped on `develop` |
-
-4. **Commit:** it runs the script and commits `chore: bump version to X.Y.Z [skip ci]` to the same branch.
-5. **Close merges:** runs are serialized per branch (`concurrency`). Each run checks out the branch head, so a merge that lands right after another bumps on top of it instead of being rejected.
+1. **Trigger:** a push to `master`, which happens when a PR merges. The bot's own commit carries `[skip ci]` and is skipped.
+2. **Reading the PR:** the workflow finds the PR number from the merge or squash commit, then reads the PR title and labels ([pr](pr.md#title)).
+3. **Bump:** `major` / `minor` / `patch` from the title or label; every merge bumps.
+4. **Commit:** it runs the script and commits `chore: bump version to X.Y.Z [skip ci]` to `master`.
+5. **Close merges:** runs are serialized (`concurrency`). Each run checks out the branch head, so a merge that lands right after another bumps on top of it instead of being rejected.
 
 **Repository setup:**
 
 - Settings → Actions → Workflow permissions must be **Read and write**.
-- If `develop` is protected, allow GitHub Actions to bypass the protection.
+- If `master` is protected, allow GitHub Actions to bypass the protection.
 
 ## Releases
 
-Release tags are `vX.Y.Z`, cut from `main` by the release scripts ([release](release.md)).
+Release tags are `vX.Y.Z`, cut from `master` ([release](release.md)).

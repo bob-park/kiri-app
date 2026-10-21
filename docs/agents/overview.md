@@ -1,7 +1,7 @@
 ---
 title: Project Overview
 scope: "**"
-applies_to: onboarding, deciding whether a change fits the template
+applies_to: onboarding, deciding whether a change fits kiri
 related:
   - ./tech-stack.md
   - ./architecture.md
@@ -10,28 +10,28 @@ related:
 
 # Project Overview
 
-> Tauri 2 desktop-app template (Rust + React). It ships a runnable skeleton — main window, settings window, tray, SQLite, auto-update, i18n — plus release/versioning scripts. New apps are built by adding domains on top of it.
+> kiri is a macOS (Apple Silicon) menu-bar app that downloads YouTube videos: paste a link with ⌘V, pick quality/format/subtitles, and a queue downloads with yt-dlp and converts with ffmpeg. A `kiri` CLI controls the running app's queue. Tauri 2 (Rust) + React.
 
 ## What it is
 
-- A **template repository**: clone it, rename the placeholders (README → "새 앱으로 만들 때 바꿀 것"), then build features.
-- The skeleton is intentionally minimal but complete end to end. Every layer has one working example to copy:
-  - frontend → command → domain → SQLite: `settings` (greeting, theme, language, auto-update)
-  - app shell: window lifecycle, app menu, tray, updater, launch at login
-  - release: `scripts/release.sh`, `scripts/release.ps1`, `scripts/latest-json.mjs`
-  - versioning: `bump-version-up.sh` + `.github/workflows/bump-version.yml`
+- **The app** (`src-tauri` + `src/`): a `main` window (queue, options sheet) and a `settings` window (General / Download / CLI / Updates), a menu-bar tray, auto-update from GitHub Releases.
+- **The engine** (`crates/kiri-core`): Tauri-free queue, download pipeline (yt-dlp → ffmpeg → move), tool installer (yt-dlp, Deno), CLI socket protocol.
+- **The CLI** (`crates/kiri-cli`, binary `kiri`): bundled as a sidecar and linked to `/usr/local/bin/kiri` from Settings → CLI. It talks to the running app over a Unix socket.
+- **Storage:** one SQLite file, `kiri.db`, for settings and the queue.
 
 ## What it is not
 
-- Not a component library. UI pieces exist only where the skeleton needs them (`src/shared/components/settings/*`).
-- No HTTP backend. The "backend" is the Rust side of the same app, reached through Tauri commands.
-- No CI build. Releases are built, signed and uploaded from personal machines ([release](./workflow/release.md)).
+- Not cross-platform. No Windows or Linux build; macOS arm64 only (minimum macOS 14.2).
+- No HTTP backend. The "backend" is the Rust side of the same app, reached through Tauri commands (UI) or the IPC socket (CLI).
+- No CI build. Releases are built, signed, notarized and uploaded from a personal Mac ([release](./workflow/release.md)). GitHub Actions only bumps the version.
+- No launch-at-login (no autostart plugin), no drag-and-drop input, no in-app player.
 
-## Platforms
+## Names
 
-- macOS: Apple Silicon only, signed and notarized.
-- Windows: x64 (NSIS installer). No code signing; only the updater `.sig`.
-
-## Placeholder names
-
-`App` (productName) · `com.bobpark.app` (identifier) · `template-rust-app` / `template_rust_app_lib` (crate) · `bob-park/template-rust-app` (repo). The full rename checklist is in [README.md](../../README.md).
+| Thing | Value |
+| ----- | ----- |
+| Product name / window title | `kiri` |
+| Bundle identifier | `org.bobpark.kiri` |
+| Cargo packages | `kiri-app` (lib `kiri_lib`, in `src-tauri`), `kiri-core`, `kiri-cli` (binary `kiri`) |
+| npm package | `kiri` |
+| Repository | `bob-park/kiri-app` |

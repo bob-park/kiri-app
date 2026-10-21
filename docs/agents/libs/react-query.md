@@ -10,40 +10,53 @@ related:
 
 # React Query
 
-> All Rust data goes through React Query hooks in `src/domain/<name>/queries/<name>.tsx`, which wrap `apis/<name>.ts`. One `queryClient` per window (`RQProvider.tsx`). A change made in one window reaches the others through a Tauri event that calls `setQueryData`.
+> All Rust data (settings, the queue, tool status, update status, CLI status) goes through React Query hooks in `src/domain/<name>/queries/<name>.tsx`, which wrap `apis/<name>.ts`. One `queryClient` per window (`RQProvider.tsx`). Changes reach every window through a Tauri event whose listener calls `setQueryData`.
 
 ## Reads
 
 ```tsx
-export function useThemePref() {
-  const { data, isLoading } = useQuery<ThemePref>({ queryKey: THEME_QUERY_KEY, queryFn: getTheme });
-  return { theme: data ?? 'system', isLoading };
+export const QUEUE_QUERY_KEY = ['queue', 'jobs'];
+
+export function useJobs() {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery<Job[]>({
+    queryKey: QUEUE_QUERY_KEY,
+    queryFn: listJobs,
+    staleTime: Infinity, // the listener below keeps the cache current
+  });
+
+  useEffect(() => {
+    const unlisten = listen<Job[]>('queue://changed', (e) => queryClient.setQueryData(QUEUE_QUERY_KEY, e.payload));
+    return () => void unlisten.then((fn) => fn());
+  }, [queryClient]);
+
+  return { jobs: data ?? [], isLoading };
 }
 ```
 
-- Return a small object with defaults applied (`data ?? 'system'`), not the raw query result.
+- Return a small object with defaults applied (`data ?? []`), not the raw query result.
 - Query keys are `[domain, resource, ...specifier]`.
+- Data that an event keeps current uses `staleTime: Infinity`; refetching would only race the events.
 
 ## Writes
 
 ```tsx
-export function useThemeUpdate({ onSuccess, onError }: QueryMutationHandle<ThemePref> = {}) {
+export function useSettingsPatch() {
   const queryClient = useQueryClient();
-  const { mutate, isPending } = useMutation<ThemePref, AppError, ThemePref>({
-    mutationKey: ['settings', 'theme', 'update'],
-    mutationFn: setTheme,
-    onSuccess: (data) => {
-      queryClient.setQueryData(THEME_QUERY_KEY, data);
-      onSuccess?.(data);
-    },
-    onError: (err) => onError?.(err),
+  const { mutate, isPending } = useMutation<Settings, AppError, SettingsPatch, { prev?: Settings }>({
+    mutationKey: ['settings', 'patch'],
+    mutationFn: patchSettings,
+    onMutate: async (patch) => { /* optimistic: merge the patch into the cache, remember prev */ },
+    onError: (_err, _patch, context) => queryClient.setQueryData(SETTINGS_QUERY_KEY, context?.prev),
+    onSettled: () => pendingPatches.end(),
   });
-  return { updateTheme: mutate, isLoading: isPending };
+  return { patchSettings: mutate, isLoading: isPending };
 }
 ```
 
-- When the command returns the new value, write it into the cache with `setQueryData`. Use `invalidateQueries` when the result affects lists you can't patch.
-- Accept `QueryMutationHandle<T>` so callers can react to success or errors.
+- When Rust emits an event with the new value (queue, tools, settings), the mutation needs no cache write: the listener does it.
+- Settings are patched optimistically. `settingsFromEcho` lays still-pending patches over the `settings://changed` echo so a slow echo can't undo a newer click.
+- Failed mutations go to `ErrorAlert` automatically; pass `meta: { silent: true }` when the caller shows the error itself (the options sheet) ([error-handling](../conventions/error-handling.md)).
 
 ## Defaults (`RQProvider.tsx`)
 
@@ -55,9 +68,10 @@ export function useThemeUpdate({ onSuccess, onError }: QueryMutationHandle<Theme
 
 Each Tauri window is a separate JS context, so it has **its own `queryClient` and Zustand store**. Nothing is shared automatically.
 
-- When a command changes data another window shows, have Rust `emit` an event (`<domain>://<event>`) carrying the new value.
-- Every window listens to it once, in a provider or hook, and calls `queryClient.setQueryData(key, payload)`. Examples: `ThemeProvider` (`settings://theme-changed`), `I18nProvider` (`settings://locale-changed`), `useUpdateStatus` (`update://status`).
+- When a command (or the CLI, or a background loop) changes data a window shows, Rust `emit`s an event (`<domain>://<event>`) carrying the new value.
+- Every window listens once, in a provider or hook, and calls `queryClient.setQueryData(key, payload)`: `ThemeProvider` (`settings://changed`), `useJobs` (`queue://changed`), `useToolsStatus` (`tools://changed`), `useUpdateStatus` (`update://status`).
+- Mount listening hooks for the window's **whole life**. A hook mounted only inside a tab misses events sent while another tab is open — `SettingsApp` calls `useJobs`, `useToolsStatus` and `useUpdateStatus` at the top for that reason.
 
 ## First paint
 
-`main.tsx` awaits values that would otherwise flash, such as theme and locale, seeds them with `queryClient.setQueryData` **before** `render`, then mounts the providers.
+`main.tsx` awaits `getSettings()` (theme and language would otherwise flash), seeds `SETTINGS_QUERY_KEY` with `queryClient.setQueryData` and calls `applyTheme` **before** `render`, then mounts the providers. A failed read shows the error and falls back to `DEFAULT_SETTINGS`.

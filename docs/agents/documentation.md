@@ -15,8 +15,8 @@ related:
 | `AGENTS.md` | map of agent docs + task routes | English |
 | `CLAUDE.md` | `@AGENTS.md` + Claude Code-only rules | Korean |
 | `docs/agents/**` | conventions, libs, workflow | English |
-| `docs/design/` | design system prompts/specs — read before UI work | as written |
-| `docs/development.md` | dev setup, run, test, build, project tree | Korean |
+| `docs/design/` | design system: `aurora-glass.md` (current UI standard), `kraken-design.md` (brand palette) — read before UI work | English |
+| `docs/development.md` | dev setup, sidecars, run, test, build, project tree, data locations | Korean |
 | `docs/release.md` | release procedure | Korean |
 | `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` | design specs | Korean |
 | `docs/superpowers/plans/YYYY-MM-DD-<topic>.md` | implementation plans | English |

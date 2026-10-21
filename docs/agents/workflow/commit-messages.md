@@ -24,11 +24,11 @@ related:
 Examples:
 
 ```text
-feat: add note search command
-fix: keep theme when stored value is unknown
+feat: add subtitle language picker
+fix: read the dropped ja language as system
 build: bump tauri to 2.13
 docs: document sqlite migration rules
-test: cover set_locale rejection
+test: cover settings patch rejection
 ```
 
 - `[skip ci]` is reserved for the version-bump bot; it stops the bump workflow from re-triggering.

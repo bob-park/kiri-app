@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Agent-agnostic guide for `template-rust-app`, a Tauri 2 desktop-app template (Rust + React). Detailed rules are split into topic files under [`docs/agents/`](docs/agents/), so an agent loads only what a task needs.
+Agent-agnostic guide for **kiri** (`org.bobpark.kiri`), a macOS (Apple Silicon) YouTube downloader built with Tauri 2 (Rust + React): a Cargo workspace with a Tauri-free engine (`crates/kiri-core`), a `kiri` CLI (`crates/kiri-cli`) and the app (`src-tauri` + `src/`). Detailed rules are split into topic files under [`docs/agents/`](docs/agents/), so an agent loads only what a task needs.
 
 Each topic doc opens with YAML frontmatter (`title`, `scope`, `applies_to`, `related`) and a one-line TL;DR blockquote. Skimming the first few lines tells you whether it applies.
 
@@ -15,18 +15,18 @@ Find the matching entry in the Map or in "How to use", open that doc, and check 
 ## Map
 
 ### Foundations
-- [Project Overview](docs/agents/overview.md): what the template is and isn't, platforms, placeholder names
+- [Project Overview](docs/agents/overview.md): what kiri is and isn't, platform, names and identifiers
 - [Tech Stack](docs/agents/tech-stack.md): libraries and tools, where versions are pinned
 
 ### Architecture & Structure
-- [Architecture](docs/agents/architecture.md): request path front → Rust → SQLite, layers, startup, windows, updater
-- [Directory Structure](docs/agents/structure.md): canonical tree, **adding a domain** (Rust + frontend order), placement rules
+- [Architecture](docs/agents/architecture.md): workspace crates, request path front → Rust → engine/SQLite, CLI IPC, sidecars, startup, windows, updater
+- [Directory Structure](docs/agents/structure.md): canonical tree (workspace + app), **adding a domain** (Rust + frontend order), placement rules
 
 ### Design
-- [Design](docs/agents/design.md): `docs/design/` first, tokens only in `globals.css`, settings building blocks, light/dark + ko/en check
+- [Design](docs/agents/design.md): Aurora Glass ([`docs/design/aurora-glass.md`](docs/design/aurora-glass.md)), tokens only in `globals.css`, motion rules, settings building blocks, light/dark + ko/en check
 
 ### Rust Conventions
-- [Rust Modules & Layering](docs/agents/conventions/rust-modules.md): dependency direction, no `tauri` in domain core/shared, file roles
+- [Rust Modules & Layering](docs/agents/conventions/rust-modules.md): crate and module dependency direction, no `tauri` in `kiri-core`/domain core/shared, file roles
 - [Tauri Commands & Events](docs/agents/conventions/tauri-commands.md): thin commands, `call()` wrappers, event names, capabilities
 - [SQLite Migrations](docs/agents/conventions/sqlite-migrations.md): one file per version, never edit shipped migrations
 - [Error Handling](docs/agents/conventions/error-handling.md): `AppError` → `{ code, message }`, frontend handling
@@ -45,15 +45,15 @@ Find the matching entry in the Map or in "How to use", open that doc, and check 
 - [i18n](docs/agents/libs/i18n.md): `en.ts`/`ko.ts` dictionaries, `useI18n`, native labels, adding a language
 
 ### Workflow
-- [Branch Naming](docs/agents/workflow/branching.md): `main` / `develop` / `feature/*` / `hotfix/*`
+- [Branch Naming](docs/agents/workflow/branching.md): `master` / `feature/*` / `hotfix/*`
 - [Commit Messages](docs/agents/workflow/commit-messages.md): `<prefix>: <subject>`
-- [Pull Requests](docs/agents/workflow/pr.md): base branch, title → version bump
-- [Versioning](docs/agents/workflow/versioning.md): semver, `bump-version-up.sh`, the `develop` workflow
-- [Release](docs/agents/workflow/release.md): local signed release scripts, `latest.json`
+- [Pull Requests](docs/agents/workflow/pr.md): base branch `master`, title → version bump
+- [Versioning](docs/agents/workflow/versioning.md): semver, `bump-version-up.sh`, the bump-on-merge-to-`master` workflow
+- [Release](docs/agents/workflow/release.md): local signed and notarized build, GitHub Release, `latest.json`
 
 ### Ops
 - [Build & Run](docs/agents/build-run.md): dev, `--no-bundle`, full build, gotchas
-- [Testing](docs/agents/testing.md): `cargo test`, `node:test`, typecheck, lint, what to test
+- [Testing](docs/agents/testing.md): `cargo test --workspace`, `node:test`, typecheck, lint, what to test
 - [Configuration & Secrets](docs/agents/configuration.md): `tauri.conf.json`, capabilities, where secrets live
 - [Documentation](docs/agents/documentation.md): where docs go, format, languages
 
@@ -68,6 +68,7 @@ Find the matching entry in the Map or in "How to use", open that doc, and check 
 - **Client-only UI state:** [zustand-slice](docs/agents/libs/zustand-slice.md)
 - **New error case:** [error-handling](docs/agents/conventions/error-handling.md)
 - **Window, menu, tray, or startup change:** [architecture](docs/agents/architecture.md) → [rust-modules](docs/agents/conventions/rust-modules.md)
+- **Download engine, yt-dlp/ffmpeg, or CLI change:** [architecture](docs/agents/architecture.md#workspace) → [rust-modules](docs/agents/conventions/rust-modules.md) → [testing](docs/agents/testing.md)
 - **Running, building, or testing:** [build-run](docs/agents/build-run.md) → [testing](docs/agents/testing.md)
 - **Config, permissions, or secrets:** [configuration](docs/agents/configuration.md)
 - **Starting a branch:** [branching](docs/agents/workflow/branching.md)
