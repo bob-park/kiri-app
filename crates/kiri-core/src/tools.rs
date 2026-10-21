@@ -81,19 +81,36 @@ async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, Strin
 
 /// Does nothing if the installed file's hash matches the latest SHA2-256SUMS.
 pub async fn ensure_ytdlp(client: &reqwest::Client, dest: &Path) -> Result<bool, String> {
-    let sums = fetch_text(client, YTDLP_SUMS_URL).await?;
-    let want = find_hash(&sums, YTDLP_ASSET).ok_or("yt-dlp checksum not found")?;
-    if let Ok(current) = fs::read(dest) {
-        if sha256_hex(&current) == want {
-            return Ok(false);
-        }
+    let want = ytdlp_latest_hash(client).await?;
+    if ytdlp_matches(dest, &want) {
+        return Ok(false);
     }
+    install_ytdlp(client, dest, &want).await?;
+    Ok(true)
+}
+
+/// The SHA256 of the latest yt-dlp release (network check only, no download).
+pub async fn ytdlp_latest_hash(client: &reqwest::Client) -> Result<String, String> {
+    let sums = fetch_text(client, YTDLP_SUMS_URL).await?;
+    find_hash(&sums, YTDLP_ASSET).ok_or_else(|| "yt-dlp checksum not found".into())
+}
+
+/// Whether the installed yt-dlp already has hash `want`.
+pub fn ytdlp_matches(dest: &Path, want: &str) -> bool {
+    fs::read(dest).is_ok_and(|current| sha256_hex(&current) == want)
+}
+
+/// Downloads yt-dlp, verifies it against `want` and installs it at `dest`.
+pub async fn install_ytdlp(
+    client: &reqwest::Client,
+    dest: &Path,
+    want: &str,
+) -> Result<(), String> {
     let bytes = fetch(client, YTDLP_URL).await?;
     if sha256_hex(&bytes) != want {
         return Err("yt-dlp checksum mismatch".into());
     }
-    install_executable(dest, &bytes).map_err(|e| e.to_string())?;
-    Ok(true)
+    install_executable(dest, &bytes).map_err(|e| e.to_string())
 }
 
 /// ponytail: installs only when missing. Add updating once yt-dlp ever needs a newer Deno.

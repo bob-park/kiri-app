@@ -7,7 +7,7 @@ export const en = {
     emptyDesc: 'Links you paste will show up here',
     empty: 'No downloads yet',
     settings: 'Settings',
-    toolsPreparing: 'Getting ready to download…',
+    toolsInstalling: (name: string) => `Downloading ${name}…`,
     toolsPreparingDesc: 'Downloading the components kiri needs on first launch. This takes a moment.',
     toolsFailed: (error: string) => `Couldn't get ready to download: ${error}`,
     retry: 'Retry',

@@ -60,7 +60,6 @@ pub fn run() {
             let db = Arc::new(Mutex::new(conn));
             let store = Arc::new(queue::SqliteQueueStore::new(db.clone(), import_ok));
             app.manage(AppState { db });
-            app.manage(tools::ToolsState::default());
             app.manage(ipc_server::IpcState::default());
             app.manage(updater::UpdateState::default());
 
@@ -71,6 +70,7 @@ pub fn run() {
                 ffmpeg: sidecar("ffmpeg"),
                 ffprobe: sidecar("ffprobe"),
             };
+            app.manage(tools::ToolsState::new(tools::initial_status(&tool_paths)));
             let paths = EnginePaths {
                 store,
                 cache_dir: path.app_cache_dir()?,

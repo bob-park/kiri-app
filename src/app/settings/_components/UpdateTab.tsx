@@ -32,7 +32,7 @@ export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabPro
   // queries
   const { settings } = useSettings();
   const { patchSettings } = useSettingsPatch();
-  const { updateTools } = useToolsUpdate();
+  const { updateTools, isLoading: toolsUpdating } = useToolsUpdate();
   const { checkUpdate, isLoading: checking } = useUpdateCheck();
   const { installUpdate } = useUpdateInstall();
   const { retryUpdateDownload } = useUpdateDownloadRetry();
@@ -63,6 +63,7 @@ export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabPro
         return t.update.installing;
     }
   })();
+  const toolsBusy = toolsUpdating || !!tools?.installing;
   const lastCheck = tools?.last_check ? new Date(tools.last_check).toLocaleString() : t.settings.update.never;
 
   return (
@@ -98,12 +99,8 @@ export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabPro
           }
           desc={t.settings.update.lastCheck(lastCheck)}
         >
-          <Button aria-label={t.settings.update.ytdlpUpdate} disabled={tools?.installing} onClick={() => updateTools()}>
-            {tools?.installing ? (
-              <span className="loading loading-spinner loading-xs" />
-            ) : (
-              t.settings.update.ytdlpUpdate
-            )}
+          <Button aria-label={t.settings.update.ytdlpUpdate} disabled={toolsBusy} onClick={() => updateTools()}>
+            {toolsBusy ? <span className="loading loading-spinner loading-xs" /> : t.settings.update.ytdlpUpdate}
           </Button>
         </SettingRow>
       </SettingSection>

@@ -64,9 +64,10 @@ export default function App() {
   sheetUrl.current = sheet?.url ?? null;
   const toolsState = toolsToast(tools);
   const toolsError = tools?.error ?? '';
+  const toolsInstalling = tools?.installing ?? '';
 
   // useEffect
-  // Until the tools are ready (e.g. first launch), a sticky toast says so.
+  // While a missing tool downloads (e.g. first launch), a sticky toast names it.
   useEffect(() => {
     if (toolsState === 'hidden') {
       dismissToastByKey('tools');
@@ -84,11 +85,11 @@ export default function App() {
         kind: 'progress',
         sticky: true,
         progress: null,
-        text: t.app.toolsPreparing,
+        text: t.app.toolsInstalling(toolsInstalling),
         desc: t.app.toolsPreparingDesc,
       });
     }
-  }, [toolsState, toolsError, t]);
+  }, [toolsState, toolsError, toolsInstalling, t]);
 
   // The handlers below only use refs, state setters and stable hook results, so the first render's are enough.
   useEffect(() => {

@@ -8,7 +8,7 @@ export const ko: Dict = {
     emptyDesc: '링크를 붙여넣으면 여기에 나타나요',
     empty: '아직 다운로드가 없습니다',
     settings: '설정',
-    toolsPreparing: '다운로드 준비 중…',
+    toolsInstalling: (name) => `${name} 내려받는 중…`,
     toolsPreparingDesc: '처음 실행할 때 필요한 구성 요소를 내려받고 있습니다. 잠시만 기다려 주세요.',
     toolsFailed: (error) => `다운로드 준비에 실패했습니다: ${error}`,
     retry: '재시도',

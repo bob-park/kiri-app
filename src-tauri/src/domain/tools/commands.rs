@@ -32,6 +32,7 @@ fn update(app: &AppHandle, f: impl FnOnce(&mut ToolsStatus)) {
 }
 
 /// `force`: the user pressed "Update now". Otherwise yt-dlp is checked once a day.
+/// `ready` follows the files on disk, so a failed check never hides tools that exist.
 pub async fn ensure(app: &AppHandle, force: bool) {
     let state = app.state::<ToolsState>();
     if state.busy.swap(true, Ordering::SeqCst) {
@@ -39,43 +40,61 @@ pub async fn ensure(app: &AppHandle, force: bool) {
     }
     let paths = app.state::<Engine>().tools().clone();
     let now = now_ms();
+    let client = tools::http_client();
+    let mut error = None;
+
+    if !paths.deno.exists() {
+        installing(app, "deno");
+        error = tools::ensure_deno(&client, &paths.deno).await.err();
+    }
     let need_ytdlp = force
         || !paths.ytdlp.exists()
         || due(
             app.state::<AppState>().settings().update.last_ytdlp_check,
             now,
         );
-
-    update(app, |s| {
-        s.installing = true;
-        s.error = None;
-    });
-    let client = tools::http_client();
-    let mut error = tools::ensure_deno(&client, &paths.deno).await.err();
     if need_ytdlp {
-        match tools::ensure_ytdlp(&client, &paths.ytdlp).await {
-            Ok(_) => {
-                let patch = serde_json::json!({ "update": { "last_ytdlp_check": now } });
-                if let Err(e) = settings::commands::patch_and_notify(app, &patch) {
-                    log::warn!("cannot save last yt-dlp check: {e}");
-                }
+        // The hash check runs without touching `installing`; only a real download sets it.
+        let result = async {
+            let want = tools::ytdlp_latest_hash(&client).await?;
+            if tools::ytdlp_matches(&paths.ytdlp, &want) {
+                return Ok(());
             }
-            Err(e) => error = error.or(Some(e)),
+            installing(app, "yt-dlp");
+            tools::install_ytdlp(&client, &paths.ytdlp, &want).await
+        }
+        .await;
+        if let Err(e) = result {
+            error = error.or(Some(e));
+        } else {
+            let patch = serde_json::json!({ "update": { "last_ytdlp_check": now } });
+            if let Err(e) = settings::commands::patch_and_notify(app, &patch) {
+                log::warn!("cannot save last yt-dlp check: {e}");
+            }
         }
     }
+
     let version = tools::version(&paths.ytdlp).await;
     let last_check = app.state::<AppState>().settings().update.last_ytdlp_check;
     let ready = paths.ytdlp.exists() && paths.deno.exists();
     update(app, |s| {
         *s = ToolsStatus {
             ready,
-            installing: false,
+            installing: None,
             ytdlp_version: version,
             error,
             last_check,
         };
     });
     state.busy.store(false, Ordering::SeqCst);
+}
+
+/// Marks `name` as downloading, right before the download starts.
+fn installing(app: &AppHandle, name: &str) {
+    update(app, |s| {
+        s.installing = Some(name.into());
+        s.error = None;
+    });
 }
 
 /// Runs `ensure` at startup and then every hour.
