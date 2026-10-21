@@ -119,6 +119,55 @@ mod tests {
     }
 
     #[test]
+    fn blob_row_is_quarantined_and_others_survive_save() {
+        let conn = open_in_memory();
+        let mut q = QueueState::default();
+        q.add(new_job("a"), 1);
+        q.add(new_job("b"), 1);
+        repository::save(&conn, &q).unwrap();
+        conn.execute("INSERT INTO jobs (id, data) VALUES (9, x'00ff')", [])
+            .unwrap();
+        let db = Arc::new(Mutex::new(conn));
+        let s = SqliteQueueStore::new(db.clone(), true);
+        let (loaded, trusted) = s.load();
+        assert!(!trusted);
+        assert_eq!(loaded.jobs, q.jobs);
+
+        s.save(&loaded).unwrap();
+        let conn = db.lock().unwrap();
+        let kept: Vec<u8> = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'corrupt_job:9'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept, [0x00, 0xff]);
+        assert_eq!(repository::load(&conn).unwrap().0.jobs, q.jobs);
+    }
+
+    #[test]
+    fn failed_load_refuses_saves() {
+        let conn = open_in_memory();
+        let mut q = QueueState::default();
+        q.add(new_job("a"), 1);
+        repository::save(&conn, &q).unwrap();
+        conn.execute_batch("ALTER TABLE jobs RENAME TO jobs_hidden")
+            .unwrap();
+        let db = Arc::new(Mutex::new(conn));
+        let s = SqliteQueueStore::new(db.clone(), true);
+        assert_eq!(s.load(), (QueueState::default(), false));
+
+        // the table comes back; the empty queue must not overwrite it
+        db.lock()
+            .unwrap()
+            .execute_batch("ALTER TABLE jobs_hidden RENAME TO jobs")
+            .unwrap();
+        assert!(s.save(&QueueState::default()).is_err());
+        assert_eq!(repository::load(&db.lock().unwrap()).unwrap().0, q);
+    }
+
+    #[test]
     fn failed_import_makes_first_load_untrusted() {
         let s = SqliteQueueStore::new(Arc::new(Mutex::new(open_in_memory())), false);
         assert_eq!(s.load(), (QueueState::default(), false));

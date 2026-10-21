@@ -35,7 +35,8 @@ pub fn run() {
             let path = app.path();
             // ponytail: a DB that cannot be opened aborts setup; add a recovery dialog if
             // users ever hit it.
-            let conn = shared::db::open(&path.app_local_data_dir()?.join("kiri.db"))?;
+            let conn = shared::db::open(&path.app_local_data_dir()?.join("kiri.db"))
+                .inspect_err(|e| log::error!("cannot open database: {e}"))?;
             // A failed import keeps the JSON file in place and starts from defaults.
             match settings::import_json(&conn, &path.app_config_dir()?.join("settings.json")) {
                 Ok(true) => log::info!("imported settings.json into the database"),

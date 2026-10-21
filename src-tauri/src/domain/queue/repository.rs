@@ -3,10 +3,13 @@
 use super::model::QueueState;
 use crate::shared::error::{AppError, AppResult};
 use kiri_core::queue::QueueStore;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, types::Value};
 use std::{
     io,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 const NEXT_ID: &str = "next_job_id";
@@ -15,17 +18,21 @@ pub fn is_empty(conn: &Connection) -> AppResult<bool> {
     Ok(!conn.query_row("SELECT EXISTS (SELECT 1 FROM jobs)", [], |r| r.get(0))?)
 }
 
-/// The stored queue, oldest job first. A row whose JSON no longer parses is moved to
-/// `meta.corrupt_job:<id>` so later saves cannot erase it, and makes the queue untrusted.
+/// The stored queue, oldest job first. A row whose `data` is not job JSON text is moved
+/// to `meta.corrupt_job:<id>` so later saves cannot erase it, and makes the queue untrusted.
 pub fn load(conn: &Connection) -> AppResult<(QueueState, bool)> {
-    let rows: Vec<(i64, String)> = conn
+    let rows: Vec<(i64, Value)> = conn
         .prepare("SELECT id, data FROM jobs ORDER BY id")?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<Result<_, _>>()?;
     let mut q = QueueState::default();
     let mut trusted = true;
     for (id, data) in rows {
-        match serde_json::from_str(&data) {
+        let parsed = match &data {
+            Value::Text(text) => serde_json::from_str(text).map_err(|e| e.to_string()),
+            other => Err(format!("data is {:?}, not text", other.data_type())),
+        };
+        match parsed {
             Ok(job) => q.jobs.push(job),
             Err(e) => {
                 log::error!("queue row {id} is not a valid job, moved to meta: {e}");
@@ -81,29 +88,40 @@ pub struct SqliteQueueStore {
     /// False when the legacy `queue.json` import failed. The load is then untrusted,
     /// as the JSON store's was for a corrupt file.
     import_ok: bool,
+    /// Set when `load` fails. Saves are then refused: the engine's empty queue would
+    /// otherwise replace job rows that were never read.
+    read_failed: AtomicBool,
 }
 
 impl SqliteQueueStore {
     pub fn new(db: Arc<Mutex<Connection>>, import_ok: bool) -> Self {
-        Self { db, import_ok }
+        Self {
+            db,
+            import_ok,
+            read_failed: AtomicBool::new(false),
+        }
     }
 }
 
 impl QueueStore for SqliteQueueStore {
-    // ponytail: a failed read starts empty and the engine's next save replaces the rows,
-    // same as the JSON store on a read error. Refuse saves after a failed load if a
-    // SELECT on the local DB ever fails in practice.
+    // ponytail: a failed read starts empty and every save is refused until restart, so
+    // the session's queue changes are not persisted; add a retrying load if reads fail
+    // transiently in practice.
     fn load(&self) -> (QueueState, bool) {
         match load(&self.db.lock().unwrap()) {
             Ok((q, trusted)) => (q, trusted && self.import_ok),
             Err(e) => {
-                log::error!("cannot read the queue, starting empty: {e}");
+                log::error!("cannot read the queue, starting empty and not saving: {e}");
+                self.read_failed.store(true, Ordering::Relaxed);
                 (QueueState::default(), false)
             }
         }
     }
 
     fn save(&self, state: &QueueState) -> io::Result<()> {
+        if self.read_failed.load(Ordering::Relaxed) {
+            return Err(io::Error::other("queue read failed; not overwriting"));
+        }
         save(&self.db.lock().unwrap(), state).map_err(io::Error::other)
     }
 }
