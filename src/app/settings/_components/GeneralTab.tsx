@@ -1,14 +1,12 @@
-import type { LocalePref, ThemePref } from '@/domain/settings/apis/settings.dto';
+import ThemePicker from '@/app/settings/_components/ThemePicker';
+import type { LocalePref } from '@/domain/settings/apis/settings.dto';
 import { useSettings, useSettingsPatch } from '@/domain/settings/queries/settings';
-import Segmented from '@/shared/components/settings/Segmented';
 import SettingRow from '@/shared/components/settings/SettingRow';
 import SettingSection from '@/shared/components/settings/SettingSection';
 import Switch from '@/shared/components/settings/Switch';
 import useI18n from '@/shared/hooks/useI18n';
 
 const LOCALES: LocalePref[] = ['system', 'ko', 'en'];
-
-const THEMES: ThemePref[] = ['system', 'light', 'dark'];
 
 export default function GeneralTab() {
   // hooks
@@ -49,12 +47,12 @@ export default function GeneralTab() {
             </select>
           )}
         </SettingRow>
-        <SettingRow label={t.settings.general.theme}>
+        <SettingRow label={t.settings.general.theme} stacked>
           {(labelId) => (
-            <Segmented
+            <ThemePicker
               labelledBy={labelId}
               value={general.theme}
-              options={THEMES.map((theme) => ({ value: theme, label: themeLabels[theme] }))}
+              labels={themeLabels}
               onChange={(theme) => patchSettings({ general: { theme } })}
             />
           )}

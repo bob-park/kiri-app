@@ -45,8 +45,8 @@ export default function CliTab() {
           {t.settings.cli.socketError(status.socket_error)}
         </div>
       )}
-      <div className="text-fg-muted mt-3 mb-1 text-xs font-semibold">{t.settings.cli.usage}</div>
-      <pre className="surface-card overflow-x-auto p-3 text-xs select-text">{USAGE}</pre>
+      <div className="text-muted mt-3 mb-1 text-xs font-semibold">{t.settings.cli.usage}</div>
+      <pre className="glass shadow-glass overflow-x-auto rounded-2xl p-3 text-xs select-text">{USAGE}</pre>
     </>
   );
 }

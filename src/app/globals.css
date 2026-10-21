@@ -72,7 +72,6 @@
 }
 
 @theme {
-  --color-fg-muted: #8b8ea3;
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
 }
 /* Aurora Glass tokens (light values; dark overrides below). `static` keeps every variable in the output. */
@@ -87,6 +86,13 @@
   --color-scrim: rgba(246, 245, 251, 0.35);
   --gradient-progress: linear-gradient(90deg, #7132f5, #5fc3ff);
   --gradient-progress-encoding: linear-gradient(90deg, #5741d8, #7fd4ff);
+
+  /* Theme picker thumbnails: each depicts a fixed theme, so one value serves both themes. */
+  --color-preview-light: #f6f5fb;
+  --color-preview-light-bar: #ffffff;
+  --color-preview-light-edge: #e6e4f0;
+  --color-preview-dark: #121318;
+  --color-preview-dark-bar: #262833;
 
   --shadow-glass: 0 4px 24px rgba(16, 17, 20, 0.05);
   --shadow-keycap: 0 2px 0 rgba(16, 17, 20, 0.06);
@@ -103,9 +109,6 @@
   --animate-collapse-out: collapse-out 200ms ease-in forwards;
   --animate-sheet-up: sheet-up 550ms var(--ease-spring) both;
   --animate-key-press: key-press 250ms ease-out;
-}
-[data-theme='light'] {
-  --color-fg-muted: #9497a9;
 }
 [data-theme='dark'] {
   --color-glass: rgba(30, 31, 40, 0.55);
@@ -136,9 +139,6 @@ body {
 }
 
 @layer components {
-  .surface-card {
-    @apply rounded-box border-base-300/70 bg-base-100 border shadow-[0_1px_4px_rgba(16,24,40,0.04)];
-  }
   .float-shadow {
     box-shadow: 0 12px 32px rgba(16, 17, 20, 0.18);
   }
