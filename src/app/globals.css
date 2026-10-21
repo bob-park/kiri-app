@@ -8,7 +8,7 @@
 @plugin 'daisyui/theme' {
   name: 'dark';
   color-scheme: dark;
-  --color-base-100: #16171c;
+  --color-base-100: #121318;
   --color-base-200: #1d1e25;
   --color-base-300: #2c2e38;
   --color-base-content: #ececf2;
@@ -41,7 +41,7 @@
   name: 'light';
   default: true;
   color-scheme: light;
-  --color-base-100: #ffffff;
+  --color-base-100: #f6f5fb;
   --color-base-200: #f6f6f9;
   --color-base-300: #dedee5;
   --color-base-content: #101114;
@@ -77,9 +77,45 @@
   --color-toast-content: #ffffff;
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
 }
+/* Aurora Glass tokens (light values; dark overrides below). `static` keeps every variable in the output. */
+@theme static {
+  --color-glass: rgba(255, 255, 255, 0.58);
+  --color-glass-edge: rgba(255, 255, 255, 0.85);
+  --color-aurora-1: #a98bff;
+  --color-aurora-2: #7fd4ff;
+  --color-aurora-3: #ffb3d9;
+  --color-muted: #686b82;
+  --color-track: rgba(113, 50, 245, 0.12);
+  --color-scrim: rgba(246, 245, 251, 0.35);
+  --gradient-progress: linear-gradient(90deg, #7132f5, #5fc3ff);
+  --gradient-progress-encoding: linear-gradient(90deg, #5741d8, #7fd4ff);
+
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+
+  --animate-drift: drift 12s ease-in-out infinite;
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-spring-in: spring-in 650ms var(--ease-spring) both;
+  --animate-pop: pop 450ms var(--ease-spring) both;
+  --animate-ring: ring 900ms ease-out 200ms;
+  --animate-flow: flow 1.6s linear infinite;
+  --animate-shimmer: shimmer 1.2s linear infinite;
+  --animate-collapse-out: collapse-out 200ms ease-in forwards;
+}
 [data-theme='light'] {
   --color-fg-muted: #9497a9;
   --color-toast: #101114;
+}
+[data-theme='dark'] {
+  --color-glass: rgba(30, 31, 40, 0.55);
+  --color-glass-edge: rgba(255, 255, 255, 0.08);
+  --color-aurora-1: #5b3bd6;
+  --color-aurora-2: #1f6f9e;
+  --color-aurora-3: #7a2d63;
+  --color-muted: #8b8ea3;
+  --color-track: rgba(139, 92, 255, 0.18);
+  --color-scrim: rgba(0, 0, 0, 0.3);
+  --gradient-progress: linear-gradient(90deg, #8b5cff, #5fc3ff);
+  --gradient-progress-encoding: linear-gradient(90deg, #6f63ff, #7fd4ff);
 }
 
 html,
@@ -119,6 +155,132 @@ body {
   .chip-idle {
     @apply bg-base-content/10 text-base-content/70;
   }
+
+  .glass {
+    background-color: var(--color-glass);
+    border: 1px solid var(--color-glass-edge);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+  }
+
+  /* Drifting background: an .aurora container holding up to three .aurora-blob children. */
+  .aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .aurora-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(46px);
+    opacity: 0.55;
+    animation: var(--animate-drift);
+  }
+  .aurora-blob:nth-child(1) {
+    width: 230px;
+    height: 230px;
+    top: -70px;
+    left: -70px;
+    background: var(--color-aurora-1);
+  }
+  .aurora-blob:nth-child(2) {
+    width: 210px;
+    height: 210px;
+    right: -60px;
+    bottom: -50px;
+    background: var(--color-aurora-2);
+    animation-delay: -4s;
+  }
+  .aurora-blob:nth-child(3) {
+    width: 140px;
+    height: 140px;
+    top: 45%;
+    left: 40%;
+    background: var(--color-aurora-3);
+    opacity: 0.3;
+    animation-delay: -8s;
+  }
+  .aurora-blob:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, 25px) scale(1.12);
+  }
+  66% {
+    transform: translate(-15px, 10px) scale(0.95);
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(3deg);
+  }
+}
+@keyframes spring-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.94);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ring {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 45%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-success) 0%, transparent);
+  }
+}
+/* Pair with background-size: 200% 100% on the progress fill. */
+@keyframes flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+/* Pair with background-size: 200px 100% on the skeleton. */
+@keyframes shimmer {
+  from {
+    background-position: -200px 0;
+  }
+  to {
+    background-position: 200px 0;
+  }
+}
+@keyframes collapse-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
 }
 
 @keyframes toast-in {
@@ -140,9 +302,18 @@ body {
   animation: toast-out 150ms ease-in forwards;
 }
 @media (prefers-reduced-motion: reduce) {
+  .aurora-blob,
+  .animate-drift,
+  .animate-float,
+  .animate-spring-in,
+  .animate-pop,
+  .animate-ring,
+  .animate-flow,
+  .animate-shimmer,
   .animate-toast-in {
     animation: none;
   }
+  .animate-collapse-out,
   .animate-toast-out {
     animation: none;
     opacity: 0;
