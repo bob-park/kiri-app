@@ -1,223 +1,114 @@
-# kiri 개발 · 빌드 · 릴리즈
+# 개발 환경 구성과 빌드
 
-kiri는 **Apple Silicon Mac 전용**이고, 빌드와 릴리즈는 로컬에서 합니다(CI 없음). Windows 빌드는 [7. Windows 빌드](#7-windows-빌드)를 보세요.
+## 필요한 도구
 
-## 1. 개발 환경 구성 (한 번)
-
-### 필요한 도구
-
-| 도구 | 버전 | 설치 |
+| 도구 | 버전 | 비고 |
 |---|---|---|
-| macOS | 14.2 이상, Apple Silicon | |
-| Xcode Command Line Tools | 최신 | `xcode-select --install` |
-| Rust | stable (edition 2024, 1.85 이상) | `curl https://sh.rustup.rs -sSf \| sh` |
-| Node.js | 24 | `mise use node@24` 또는 공식 설치본 |
-| Yarn | 4 (Berry) | `corepack enable` (package.json의 `packageManager`를 따름) |
-| GitHub CLI | 최신 (릴리즈할 때만) | `brew install gh` 후 `gh auth login` |
+| Rust | stable 1.85 이상 (edition 2024) | [rustup](https://rustup.rs)으로 설치 |
+| Node.js | 26 | `.mise.toml`에 고정 |
+| Yarn | 4.18.1 | `.mise.toml`에 고정, `nodeLinker: node-modules` |
+| [mise](https://mise.jdx.dev) | 최신 | 권장. Node/Yarn 버전을 자동으로 맞춤 |
 
-### 저장소 준비
+OS별 추가 준비:
 
-```sh
-git clone git@github.com:bob-park/kiri-app.git
-cd kiri-app
+- **macOS**: Xcode Command Line Tools (`xcode-select --install`)
+- **Windows**:
+  - [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)의 "C++를 사용한 데스크톱 개발" 워크로드
+  - WebView2 런타임 (Windows 10/11에는 기본 설치)
+
+## 처음 한 번
+
+```bash
+mise install                                  # Node 26, Yarn 4.18.1
+export GITHUB_NPM_AUTH_TOKEN=<GitHub PAT>     # read:packages 권한 — @bob-park/* (ESLint/Prettier 설정) 설치용
 yarn install
-yarn sidecars
 ```
 
-`yarn sidecars`는 두 가지를 `src-tauri/binaries/`에 준비합니다.
-- ffmpeg/ffprobe arm64 정적 빌드: `scripts/fetch-ffmpeg.sh`가 받습니다. URL과 SHA256은 `scripts/ffmpeg.lock`에 고정되어 있고, 필요한 인코더가 모두 들어 있는지도 검사합니다.
-- `kiri` CLI 릴리즈 빌드: `scripts/build-cli.sh`가 만들어 `kiri-cli-aarch64-apple-darwin`으로 복사합니다.
+- `@bob-park/*` 패키지는 GitHub Packages에서 받는다(`.yarnrc.yml`의 `npmScopes`). 그래서 토큰이 없으면 `yarn install`이 실패한다. 셸 프로필에 `export`해 두면 편하다.
+- `.yarnrc.yml`은 `npmMinimalAgeGate: 0`(막 공개된 패키지도 설치)과 `enableScripts: true`(패키지 설치 스크립트 실행)로 설정되어 있다.
 
-> **새로 clone 했다면 `cargo build`, `cargo test`, `yarn tauri dev`보다 먼저 `yarn sidecars`를 실행하세요.** Tauri가 빌드할 때 `externalBin` 파일이 있는지 검사하므로, 없으면 빌드가 실패합니다. `src-tauri/binaries/`는 git에 넣지 않습니다.
+## 개발 실행
 
-ffmpeg 버전을 올릴 때는 `sh scripts/fetch-ffmpeg.sh --update`로 `scripts/ffmpeg.lock`을 갱신하고 커밋합니다.
-
-## 2. 프로젝트 구조
-
-```
-crates/kiri-core/   Tauri 비의존 코어: 작업 모델, yt-dlp/ffmpeg 인자·파서, 프로세스 실행,
-                    다운로드 파이프라인, 큐 엔진, CLI 소켓 프로토콜, yt-dlp·Deno 설치
-crates/kiri-cli/    `kiri` CLI 바이너리
-src-tauri/          Tauri 앱 셸: 설정, 명령, 메뉴 막대, 종료 처리, 업데이터, CLI 설치, Info.plist
-src/                React 프론트엔드: 메인 창, 옵션 시트, 환경설정 창, 다국어(locales), 테마
-scripts/            fetch-ffmpeg.sh, build-cli.sh, latest-json.mjs
-docs/superpowers/   설계 스펙과 구현 계획
+```bash
+yarn tauri dev
 ```
 
-## 3. 개발
+- Vite 개발 서버(`http://localhost:1420`)와 Rust 앱이 함께 뜬다.
+  - 프론트 코드는 즉시 반영된다.
+  - Rust 코드나 `tauri.conf.json`을 바꾸면 앱이 다시 빌드되고 재시작된다.
+- 창은 메인(`main`)과 설정(`settings`) 두 개다. 설정 창은 다음 방법으로 연다.
+  - `Cmd+,` (Windows는 `Ctrl+,`)
+  - 앱 메뉴 → 설정…
+  - 트레이 → 설정
+- 웹 개발자 도구: 창에서 우클릭 → 검사. React Query devtools는 개발 빌드에서만 화면 우하단에 뜬다.
+- **트레이 상주 앱이라 창을 닫아도 프로세스가 남는다.**
+  - `yarn tauri dev`를 다시 실행하기 전에 트레이 → **종료**를 한다.
+  - 남아 있으면 중복 실행 방지 때문에 새 인스턴스는 기존 창만 띄우고 꺼진다.
+- 개발 빌드는 자동 업데이트 확인을 하지 않는다. 6시간 주기 확인은 release 빌드에서만 한다.
+- 첫 실행이나 의존성을 추가한 직후에는 Vite가 의존성을 다시 최적화하면서 페이지를 한 번 새로 고친다. 이때 콘솔에 "Invalid hook call"이 잠깐 보일 수 있지만, 새로 고침 뒤에는 사라진다.
 
-```sh
-yarn tauri dev                      # 앱 실행 (프론트엔드 핫 리로드)
-cargo test --workspace && yarn test # 전체 테스트
-yarn build                          # 타입 검사 + 프론트엔드 빌드
+## 테스트와 검사
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --lib   # Rust: DB/마이그레이션, 도메인, 에러 직렬화, 업데이트 상태
+yarn test                                               # 프론트 순수 로직(src/**/*.test.ts) + 스크립트(scripts/*.test.mjs), node:test
+yarn typecheck                                          # TypeScript 타입 검사 (ko 사전 키 누락도 여기서 잡힌다)
+yarn lint                                               # ESLint + Prettier (@bob-park 설정)
 ```
 
-- **도구 위치:** 앱이 처음 실행될 때 yt-dlp와 Deno를 `~/Library/Application Support/org.bobpark.kiri/bin/`에 받습니다. yt-dlp는 하루에 한 번 갱신을 확인합니다.
-- **데이터 위치:**
-  - 설정: `~/Library/Application Support/org.bobpark.kiri/settings.json`
-  - 큐: `~/Library/Application Support/org.bobpark.kiri/queue.json`
-  - 작업별 로그: `~/Library/Logs/org.bobpark.kiri/jobs/<id>.log`
-- **CLI를 dev 앱에 붙이기:** `./target/release/kiri list`. 소켓 경로는 환경변수 `KIRI_SOCKET`으로 바꿀 수 있습니다.
-- **`.kiripart` 표시:** `yarn tauri dev`는 `.app` 번들이 아니라서 `.kiripart`가 폴더로 보입니다. 패키지(파일 하나)로 보이는지 확인하려면 번들을 만들어 macOS에 등록하세요.
-  ```sh
-  yarn tauri build --debug --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
-  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f target/debug/bundle/macos/kiri.app
-  ```
+`yarn prettier`로 포맷을 일괄 적용한다.
 
-## 4. 서명 준비 (한 번)
+## 빌드
 
-### Apple Developer ID
-
-- "Developer ID Application" 인증서가 키체인에 있어야 합니다. `security find-identity -v -p codesigning`으로 확인합니다.
-- 공증에 쓸 앱 전용 암호를 https://account.apple.com 에서 만듭니다.
-
-### 업데이트 서명 키
-
-```sh
-yarn tauri signer generate -w ~/.tauri/kiri.key   # 암호를 정해 입력
+```bash
+yarn tauri build --no-bundle   # 서명 키 없이 컴파일만 확인
+yarn tauri build               # .app/.dmg/NSIS 번들 + 업데이터 아티팩트 (서명 키 필요)
 ```
 
-- 공개키(`~/.tauri/kiri.key.pub` 내용)는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`에 넣습니다. 현재 저장소에는 이미 들어 있습니다.
-- 개인키와 암호를 잃어버리면 이미 설치된 앱에 더 이상 업데이트를 보낼 수 없습니다. 따로 안전하게 보관하세요.
-- 공개키가 비어 있으면 `scripts/latest-json.mjs`가 릴리즈를 거부합니다.
-- 릴리즈 빌드(`--debug` 없는 `yarn tauri build`)는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`가 비어 있거나 `<PUBKEY>`이면 `updater pubkey is empty — see docs/development.md` 오류로 실패합니다.
+- 결과물은 `src-tauri/target/release/bundle/`에 생긴다.
+- `createUpdaterArtifacts`가 켜져 있어서 번들 빌드에는 `TAURI_SIGNING_PRIVATE_KEY`가 필요하다.
+- 서명, 공증, GitHub 릴리스 업로드는 [릴리스 절차](release.md)를 따른다.
 
-### `~/.config/kiri/sign.env` (커밋 금지)
+## 프로젝트 구조
 
-```sh
-APPLE_SIGNING_IDENTITY="Developer ID Application: <이름> (<TEAM_ID>)"
-APPLE_ID="<apple id 이메일>"
-APPLE_PASSWORD="<앱 전용 암호>"
-APPLE_TEAM_ID="<TEAM_ID>"
-TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/kiri.key"
-TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<업데이트 키 암호>"
+프론트(`src/domain/<name>`)와 Rust(`src-tauri/src/domain/<name>`)는 **같은 도메인 이름으로 짝을 이룬다.**
+
+```
+src/                          # React (Vite SPA). 창 라벨(main/settings)로 화면을 고른다
+├─ app/
+│  ├─ main.tsx                # 진입점: 테마·언어를 먼저 적용하고 Provider로 감싸 렌더
+│  ├─ App.tsx                 # 메인 창
+│  ├─ globals.css             # Tailwind + daisyUI 테마 (색은 여기에만)
+│  └─ settings/               # 설정 창 (SettingsApp, _components/Tabs 등)
+├─ domain/<name>/             # apis(Tauri command 호출 + dto) · queries(React Query) · components · store(Zustand)
+├─ shared/                    # api(call), i18n, providers(theme, i18n), components, hooks, queries, store
+└─ utils/                     # 순수 함수만 (+ *.test.ts)
+
+src-tauri/
+├─ tauri.conf.json            # 창 2개, 번들, 업데이터
+├─ capabilities/default.json  # 웹뷰 권한
+└─ src/
+   ├─ lib.rs                  # 조립만: 플러그인, setup, command 등록
+   ├─ app/                    # 앱 껍데기: state, window, menu, tray, updater, autostart, i18n(네이티브 라벨)
+   ├─ domain/<name>/          # mod.rs(공개 API) · model.rs · repository.rs(SQL) · commands.rs(Tauri 어댑터)
+   └─ shared/                 # db.rs(열기·마이그레이션), migrations/*.sql, error.rs(AppError)
+
+scripts/                      # 로컬 릴리스 스크립트, latest.json 생성, 테스트
+bump-version-up.sh            # 버전 올림 (GitHub Actions가 develop 머지 때 실행)
 ```
 
-키 암호가 맞는지 미리 확인하려면 작은 파일에 서명해 봅니다. `.sig` 파일이 생기면 정상입니다.
+새 기능을 추가하는 순서와 규칙은 [AGENTS.md](../AGENTS.md)와 [docs/agents/structure.md](agents/structure.md)를 본다.
 
-```sh
-echo test > /tmp/t && ( set -a; . ~/.config/kiri/sign.env; set +a;
-  TAURI_SIGNING_PRIVATE_KEY="$(cat "$TAURI_SIGNING_PRIVATE_KEY")" yarn tauri signer sign /tmp/t ) && ls /tmp/t.sig
-```
+## 데이터 초기화
 
-## 5. 릴리즈
+앱을 종료한 뒤 아래 폴더를 지운다. 설정이 모두 사라진다.
 
-예시는 버전 `0.2.0` 기준입니다. 모든 명령은 같은 셸에서 이어서 실행합니다.
+- macOS: `~/Library/Application Support/com.bobpark.app/`
+- Windows: `%APPDATA%\com.bobpark.app\`
 
-1. **버전 올리기:** 아래 5곳의 `version`을 같은 값으로 바꾸고, 바뀐 `Cargo.lock`과 함께 커밋합니다.
-   - `package.json`
-   - `src-tauri/tauri.conf.json`
-   - `src-tauri/Cargo.toml`
-   - `crates/kiri-core/Cargo.toml`
-   - `crates/kiri-cli/Cargo.toml`
-2. **테스트와 sidecar:**
-   ```sh
-   cargo test --workspace && yarn test
-   yarn sidecars
-   ```
-3. **빌드, 서명, `.app` 공증, 업데이트 파일 생성:** 업데이트 키는 파일 경로가 아니라 **파일 내용**으로 넘깁니다.
-   ```sh
-   set -a; . ~/.config/kiri/sign.env; set +a
-   TAURI_SIGNING_PRIVATE_KEY="$(cat "$TAURI_SIGNING_PRIVATE_KEY")" yarn tauri build --bundles app,dmg
-   ```
-   `target/release/bundle/`에 결과물이 생깁니다.
-   - `macos/kiri.app`
-   - `macos/kiri.app.tar.gz`, `macos/kiri.app.tar.gz.sig` (업데이트용)
-   - `dmg/kiri_0.2.0_aarch64.dmg`
-4. **`.dmg` 공증과 확인:**
-   ```sh
-   DMG=target/release/bundle/dmg/kiri_0.2.0_aarch64.dmg
-   xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-   xcrun stapler staple "$DMG"
-   spctl --assess --type open --context context:primary-signature -vv "$DMG"
-   spctl --assess --type execute -vv target/release/bundle/macos/kiri.app
-   ```
-   두 `spctl` 모두 `accepted`, `source=Notarized Developer ID`가 나와야 합니다.
-5. **GitHub Release:**
-   ```sh
-   B=target/release/bundle/macos
-   gh release create v0.2.0 --target master --title "kiri v0.2.0" "$DMG" "$B/kiri.app.tar.gz" "$B/kiri.app.tar.gz.sig" --notes "…"
-   ```
-6. **업데이트 매니페스트:**
-   ```sh
-   node scripts/latest-json.mjs v0.2.0
-   ```
-   릴리즈에 올라간 `.sig`로 `latest.json`을 만들어 같은 릴리즈에 올립니다. 앱은 `https://github.com/bob-park/kiri-app/releases/latest/download/latest.json`을 확인합니다.
+DB 스키마는 `PRAGMA user_version`으로 관리한다. 스키마를 바꾸는 방법:
 
-## 6. 릴리즈 후 확인
+1. `src-tauri/src/shared/migrations/000N_<설명>.sql`을 추가한다.
+2. `shared/db.rs`의 `MIGRATIONS`에 이어 붙인다.
 
-- 새로 받은 dmg를 열어 Gatekeeper 경고 없이 설치·실행되는지 확인합니다.
-- 이전 버전 앱에서 설정 > 업데이트 > 지금 확인 → 배너 → 설치 후 재시작 → 새 버전으로 바뀌는지 확인합니다.
-
-## 7. Windows 빌드
-
-### 현재 상태: 아직 지원하지 않음
-
-kiri는 macOS 전용으로 설계되어 있어서, **지금 코드는 Windows에서 그대로 빌드되거나 동작하지 않습니다.** Windows 설치 파일을 만들려면 먼저 아래 부분을 Windows용으로 옮겨야 합니다.
-
-| 영역 | 지금 (macOS) | 위치 | Windows에서 필요한 것 |
-|---|---|---|---|
-| 다운로드 중지 | Unix 프로세스 그룹 kill (`process_group`, `killpg`) | `crates/kiri-core/src/runner.rs` | Job Object로 자식 프로세스 트리 종료 |
-| CLI ↔ 앱 통신 | Unix 소켓 (`tokio::net::UnixListener`) | `crates/kiri-core/src/ipc.rs`, `crates/kiri-cli` | Named pipe (`tokio::net::windows::named_pipe`) |
-| 실행 권한·파일 처리 | `PermissionsExt`(chmod), `/usr/bin/ditto`로 zip 풀기 | `crates/kiri-core/src/tools.rs`, `files.rs` | chmod 불필요, zip 풀기는 `zip` 크레이트 등 |
-| 외부 도구 | `yt-dlp_macos`, `deno-aarch64-apple-darwin.zip` | `crates/kiri-core/src/tools.rs` | `yt-dlp.exe`, `deno-x86_64-pc-windows-msvc.zip` |
-| ffmpeg sidecar | martin-riedl.de macOS arm64 빌드 | `scripts/fetch-ffmpeg.sh`, `scripts/ffmpeg.lock` | Windows x64 정적 빌드와 이를 받는 PowerShell 스크립트 |
-| 하드웨어 인코딩 | VideoToolbox (`*_videotoolbox`, `-hwaccel videotoolbox`) | `crates/kiri-core/src/ffmpeg.rs` | NVENC / QSV / AMF 중 선택, 또는 소프트웨어만 |
-| CLI 설치 | `/usr/local/bin/kiri` 링크 + `osascript` 관리자 권한 | `src-tauri/src/cli_install.rs` | 설치 폴더를 사용자 PATH에 추가 |
-| 창·트레이 | 메뉴 막대, Dock 숨기기(activation policy), 앱 메뉴 | `src-tauri/src/windows.rs`, `tray.rs` | 시스템 트레이 (Dock·앱 메뉴 코드는 `#[cfg(target_os = "macos")]`로 분리) |
-| `.kiripart` 표시 | Info.plist 패키지 등록 | `src-tauri/Info.plist` | 같은 개념이 없음 (폴더로 보임) |
-| 기본 경로 | `$HOME/Movies/kiri`, `~/Library/...` | `src-tauri/src/settings.rs`, `ipc.rs` | `%USERPROFILE%\Videos\kiri`, `dirs` 크레이트 |
-| 번들 설정 | `targets: ["app","dmg"]`, macOS 서명 설정 | `src-tauri/tauri.conf.json` | `tauri.windows.conf.json`에 `nsis`, `windows.certificateThumbprint` 등 |
-
-이 작업은 따로 설계(스펙)부터 잡아서 진행하는 것을 권장합니다.
-
-### 옮긴 뒤의 빌드 절차
-
-Tauri의 Windows 설치 파일(NSIS `.exe`, `.msi`)은 **Windows에서 빌드**해야 합니다. macOS에서 교차 빌드(`cargo-xwin`)도 가능은 하지만 실험적이고, 코드 서명은 어차피 Windows 환경이 필요합니다. Windows PC를 쓰거나 GitHub Actions의 `windows-latest` 러너를 씁니다.
-
-**1. 도구 준비 (Windows 10/11 x64)**
-
-| 도구 | 설치 |
-|---|---|
-| Visual Studio Build Tools | "C++를 사용한 데스크톱 개발" 워크로드 (MSVC, Windows SDK) |
-| WebView2 런타임 | Windows 10/11에는 대부분 이미 있음. 없으면 Microsoft에서 설치 |
-| Rust | `rustup` 설치 후 `rustup default stable-msvc` |
-| Node.js 24, Yarn 4 | Node 공식 설치본 + `corepack enable` |
-| Git, GitHub CLI | `winget install Git.Git GitHub.cli` |
-
-**2. 저장소 준비**
-
-```powershell
-git clone https://github.com/bob-park/kiri-app.git
-cd kiri-app
-yarn install
-# ffmpeg/ffprobe Windows 빌드를 src-tauri\binaries\ffmpeg-x86_64-pc-windows-msvc.exe 등으로 준비
-cargo build -p kiri-cli --release
-copy target\release\kiri.exe src-tauri\binaries\kiri-cli-x86_64-pc-windows-msvc.exe
-```
-
-sidecar 이름은 `<이름>-x86_64-pc-windows-msvc.exe` 형식이어야 Tauri가 찾습니다.
-
-**3. 빌드와 서명**
-
-```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $HOME\.tauri\kiri.key -Raw   # 업데이트 서명 키 (macOS와 같은 키)
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<업데이트 키 암호>"
-yarn tauri build --bundles nsis
-```
-
-- 결과물은 `target\release\bundle\nsis\kiri_<버전>_x64-setup.exe`와 그 `.sig`(업데이트용)입니다.
-- 코드 서명 없이도 설치는 되지만, SmartScreen 경고가 뜹니다. 서명하려면 코드 서명 인증서(OV/EV) 또는 Azure Trusted Signing을 준비하고, `tauri.windows.conf.json`의 `bundle.windows`(`certificateThumbprint`, `digestAlgorithm`, `timestampUrl` 또는 `signCommand`)에 설정합니다.
-- 업데이트 설치 방식은 `plugins.updater.windows.installMode`(예: `"passive"`)로 정합니다.
-
-**4. 릴리즈와 업데이트 매니페스트**
-
-- macOS와 같은 GitHub Release에 `kiri_<버전>_x64-setup.exe`와 `.sig`를 함께 올립니다.
-- `scripts/latest-json.mjs`의 `PLATFORMS`에 Windows 항목을 추가해야 `latest.json`에 Windows 플랫폼이 들어갑니다.
-  ```js
-  const PLATFORMS = [
-    { suffix: ".app.tar.gz.sig", key: "darwin-aarch64" },
-    { suffix: "-setup.exe.sig", key: "windows-x86_64" },
-  ];
-  ```
-- 두 플랫폼 파일을 모두 올린 뒤 `node scripts/latest-json.mjs v<버전>`을 한 번 실행합니다.
+배포된 마이그레이션 파일은 고치지 않는다.
