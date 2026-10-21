@@ -1,25 +1,28 @@
 import { useEffect, useState } from 'react';
 
-import { useJobs } from '@/domain/queue/queries/queue';
+import type { Job } from '@/domain/queue/apis/queue.dto';
 import { useSettings, useSettingsPatch } from '@/domain/settings/queries/settings';
-import { useToolsStatus, useToolsUpdate } from '@/domain/tools/queries/tools';
-import {
-  useUpdateCheck,
-  useUpdateDownloadRetry,
-  useUpdateInstall,
-  useUpdateStatus,
-} from '@/domain/updater/queries/updater';
+import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
+import { useToolsUpdate } from '@/domain/tools/queries/tools';
+import { useUpdateCheck, useUpdateDownloadRetry, useUpdateInstall } from '@/domain/updater/queries/updater';
 import Button from '@/shared/components/settings/Button';
 import SettingRow from '@/shared/components/settings/SettingRow';
 import SettingSection from '@/shared/components/settings/SettingSection';
 import Switch from '@/shared/components/settings/Switch';
 import useI18n from '@/shared/hooks/useI18n';
 import { isIdle } from '@/utils/queue';
-import { updatePct } from '@/utils/update';
+import { type UpdateView, updatePct } from '@/utils/update';
 
 import { getVersion } from '@tauri-apps/api/app';
 
-export default function UpdateTab() {
+interface UpdateTabProps {
+  jobs: Job[];
+  tools: ToolsStatus | null;
+  update: UpdateView;
+}
+
+/** The data comes from SettingsApp, whose listeners live as long as the window (this tab unmounts). */
+export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabProps>) {
   // state
   const [version, setVersion] = useState('');
 
@@ -29,10 +32,7 @@ export default function UpdateTab() {
   // queries
   const { settings } = useSettings();
   const { patchSettings } = useSettingsPatch();
-  const { jobs } = useJobs();
-  const { status: tools } = useToolsStatus();
   const { updateTools } = useToolsUpdate();
-  const { info, phase, progress, checked } = useUpdateStatus();
   const { checkUpdate, isLoading: checking } = useUpdateCheck();
   const { installUpdate } = useUpdateInstall();
   const { retryUpdateDownload } = useUpdateDownloadRetry();
@@ -42,6 +42,7 @@ export default function UpdateTab() {
     void getVersion().then(setVersion);
   }, []);
 
+  const { info, phase, progress, checked } = update;
   const idle = isIdle(jobs);
   const next = info?.version ?? '';
   const percent = updatePct(progress);

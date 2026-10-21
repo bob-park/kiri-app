@@ -62,11 +62,11 @@ export default function App() {
   const { clearCompleted } = useCompletedClear();
 
   sheetUrl.current = sheet?.url ?? null;
+  const toolsState = toolsToast(tools);
+  const toolsError = tools?.error ?? '';
 
   // useEffect
   // Until the tools are ready (e.g. first launch), a sticky toast says so.
-  const toolsState = toolsToast(tools);
-  const toolsError = tools?.error ?? '';
   useEffect(() => {
     if (toolsState === 'hidden') {
       dismissToastByKey('tools');

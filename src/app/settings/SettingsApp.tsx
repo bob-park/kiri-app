@@ -4,6 +4,9 @@ import CliTab from '@/app/settings/_components/CliTab';
 import DownloadTab from '@/app/settings/_components/DownloadTab';
 import GeneralTab from '@/app/settings/_components/GeneralTab';
 import UpdateTab from '@/app/settings/_components/UpdateTab';
+import { useJobs } from '@/domain/queue/queries/queue';
+import { useToolsStatus } from '@/domain/tools/queries/tools';
+import { useUpdateStatus } from '@/domain/updater/queries/updater';
 import Icon from '@/shared/components/Icon';
 import useI18n from '@/shared/hooks/useI18n';
 
@@ -13,7 +16,7 @@ const TABS = [
   { key: 'general', icon: 'settings', Body: GeneralTab },
   { key: 'download', icon: 'download', Body: DownloadTab },
   { key: 'cli', icon: 'terminal', Body: CliTab },
-  { key: 'update', icon: 'refresh', Body: UpdateTab },
+  { key: 'update', icon: 'refresh', Body: null },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -26,7 +29,14 @@ export default function SettingsApp() {
   // hooks
   const { t } = useI18n();
 
-  const Body = TABS.find((x) => x.key === tab)?.Body ?? GeneralTab;
+  // queries
+  // Read here, not in UpdateTab: their event listeners must live as long as the window,
+  // or an update://status (or queue/tools) event sent while another tab is open would be lost.
+  const { jobs } = useJobs();
+  const { status: tools } = useToolsStatus();
+  const update = useUpdateStatus();
+
+  const Body = TABS.find((x) => x.key === tab)?.Body;
 
   return (
     <div className="bg-base-200 flex h-full flex-col">
@@ -51,7 +61,7 @@ export default function SettingsApp() {
         ))}
       </nav>
       <div className="flex-1 overflow-y-auto px-5 pt-1 pb-4">
-        <Body />
+        {Body ? <Body /> : <UpdateTab jobs={jobs} tools={tools} update={update} />}
       </div>
     </div>
   );

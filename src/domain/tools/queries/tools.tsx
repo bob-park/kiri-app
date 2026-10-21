@@ -23,8 +23,9 @@ export function useToolsStatus() {
       // `tools://changed` arrived while the command ran: that value is newer.
       return after !== before && after ? after : status;
     },
-    // The listener below lives only while a reader is mounted (e.g. Settings → Update), so re-read on mount.
-    refetchOnMount: 'always',
+    // The listener below keeps the cache current. Mount this hook once per window, for the window's
+    // whole life (App, StatusBar, SettingsApp), so no event is missed.
+    staleTime: Infinity,
   });
 
   useEffect(() => {

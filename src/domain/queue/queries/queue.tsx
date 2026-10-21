@@ -17,8 +17,9 @@ export function useJobs() {
   const { data, isLoading } = useQuery<Job[]>({
     queryKey: QUEUE_QUERY_KEY,
     queryFn: listJobs,
-    // The listener below lives only while a reader is mounted (e.g. Settings → Update), so re-read on mount.
-    refetchOnMount: 'always',
+    // The listener below keeps the cache current. Mount this hook once per window, for the window's
+    // whole life (App, StatusBar, SettingsApp), so no event is missed.
+    staleTime: Infinity,
   });
 
   useEffect(() => {
