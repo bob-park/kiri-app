@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
@@ -17,5 +16,4 @@ export default defineConfig({
     hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
     watch: { ignored: ['**/src-tauri/**', '**/target/**', '**/crates/**'] },
   },
-  test: { environment: 'node', include: ['src/test/**/*.test.ts'] },
 });

@@ -10,7 +10,7 @@ export default function I18nProvider({ children }: Readonly<{ children: React.Re
   // queries
   const { settings } = useSettings();
 
-  const locale = resolveLocale(settings?.general.ui_language ?? 'system', navigator.language);
+  const locale = resolveLocale(settings.general.ui_language, navigator.language);
 
   // useEffect
   useEffect(() => {

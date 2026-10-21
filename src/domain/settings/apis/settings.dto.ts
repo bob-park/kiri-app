@@ -21,3 +21,11 @@ export type Settings = {
   /** `last_ytdlp_check`: Unix ms. */
   update: { auto_check: boolean; last_ytdlp_check: number | null };
 };
+
+/** Arrays are replaced whole, objects merged key by key (same as Rust `patch`). */
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends unknown[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
+
+/** `patch_settings` input. */
+export type SettingsPatch = DeepPartial<Settings>;

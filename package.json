@@ -7,10 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "tauri": "tauri",
-    "test": "node --test \"src/{app,domain,shared,utils}/**/*.test.ts\" \"scripts/*.test.mjs\"",
-    "test:legacy": "vitest run",
+    "test": "node --test \"src/**/*.test.ts\" \"scripts/*.test.mjs\"",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --no-error-on-unmatched-pattern",
+    "lint": "eslint src",
     "prettier": "prettier --write src",
     "sidecars": "sh scripts/fetch-ffmpeg.sh && sh scripts/build-cli.sh"
   },
@@ -21,11 +20,9 @@
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "classnames": "^2.5.1",
-    "i18next": "^26",
     "immer": "^11.1.21",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-i18next": "^17",
     "zustand": "^5"
   },
   "devDependencies": {
@@ -44,8 +41,7 @@
     "prettier": "^3.9.10",
     "tailwindcss": "^4",
     "typescript": "^6",
-    "vite": "^8",
-    "vitest": "^4"
+    "vite": "^8"
   },
   "packageManager": "yarn@4.18.1",
   "prettier": "@bob-park/prettier-config-bobpark"

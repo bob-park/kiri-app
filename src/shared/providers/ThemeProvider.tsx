@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Settings, ThemePref } from '@/domain/settings/apis/settings.dto';
-import { SETTINGS_QUERY_KEY, useSettings } from '@/domain/settings/queries/settings';
+import { SETTINGS_QUERY_KEY, settingsFromEcho, useSettings } from '@/domain/settings/queries/settings';
 import { resolveTheme } from '@/utils/theme';
 
 import { listen } from '@tauri-apps/api/event';
@@ -21,7 +21,7 @@ export default function ThemeProvider({ children }: Readonly<{ children: React.R
   // queries
   const { settings } = useSettings();
 
-  const theme = settings?.general.theme ?? 'system';
+  const theme = settings.general.theme;
 
   // useEffect
   useEffect(() => {
@@ -41,8 +41,9 @@ export default function ThemeProvider({ children }: Readonly<{ children: React.R
   useEffect(() => {
     // Settings changed (here or in another window). This one listener keeps the window's whole
     // `['settings']` cache current, so I18nProvider and every `useSettings()` reader follow too.
+    // Patches still in flight from this window are laid over the echo (see useSettingsPatch).
     const unlisten = listen<Settings>('settings://changed', (e) =>
-      queryClient.setQueryData(SETTINGS_QUERY_KEY, e.payload),
+      queryClient.setQueryData(SETTINGS_QUERY_KEY, settingsFromEcho(e.payload)),
     );
 
     return () => {

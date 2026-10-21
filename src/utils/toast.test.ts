@@ -3,7 +3,7 @@ import type { Toast } from '@/shared/store/toast/toast.state';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { upsertToast, withLeaving } from './toast.ts';
+import { TOAST_MS, createToastTimers, upsertToast, withLeaving } from './toast.ts';
 
 const toast = (id: number, text = `t${id}`): Toast => ({ id, kind: 'info', text });
 
@@ -38,4 +38,34 @@ void test('withLeaving keeps removed toasts in place, marked leaving, and append
 void test('withLeaving updates live toasts in place and revives nothing by accident', () => {
   assert.deepEqual(withLeaving([toast(1, 'old')], [toast(1, 'new')]), [toast(1, 'new')]);
   assert.deepEqual(withLeaving([{ ...toast(1), leaving: true }], []), [{ ...toast(1), leaving: true }]);
+});
+
+void test('toast timers auto-dismiss plain toasts and keep sticky ones', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const expired: number[] = [];
+  const timers = createToastTimers((id) => expired.push(id));
+  timers.schedule(1, false);
+  timers.schedule(2, true);
+  t.mock.timers.tick(TOAST_MS * 3);
+  assert.deepEqual(expired, [1]);
+});
+
+void test('an earlier timer does not close a toast that became sticky', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const expired: number[] = [];
+  const timers = createToastTimers((id) => expired.push(id));
+  timers.schedule(1, false);
+  timers.schedule(1, true);
+  t.mock.timers.tick(TOAST_MS * 2);
+  assert.deepEqual(expired, []);
+});
+
+void test('clear cancels a pending auto-dismiss', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const expired: number[] = [];
+  const timers = createToastTimers((id) => expired.push(id));
+  timers.schedule(1, false);
+  timers.clear(1);
+  t.mock.timers.tick(TOAST_MS);
+  assert.deepEqual(expired, []);
 });

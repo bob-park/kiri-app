@@ -7,8 +7,14 @@ import { useStore } from '@/shared/store/rootStore';
 // One client per window: each Tauri window is its own JS context.
 export const queryClient = new QueryClient({
   // Every failed mutation is shown by ErrorAlert. `call()` always rejects with an AppError.
+  // A mutation with `meta.silent` shows its own error instead.
   mutationCache: new MutationCache({
-    onError: (error) => useStore.getState().showError(error as unknown as AppError),
+    onError: (error, _variables, _context, mutation) => {
+      if (mutation.meta?.silent === true) {
+        return;
+      }
+      useStore.getState().showError(error as unknown as AppError);
+    },
   }),
   defaultOptions: {
     queries: {

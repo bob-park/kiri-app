@@ -20,3 +20,30 @@ export function withLeaving(shown: ShownToast[], live: Toast[]): ShownToast[] {
 
 /** How long a non-sticky toast stays up. */
 export const TOAST_MS = 5000;
+
+/** Auto-dismiss bookkeeping for the toast slice. `schedule` replaces any earlier timer for the id. */
+export function createToastTimers(onExpire: (id: number) => void, ms = TOAST_MS) {
+  const timers = new Map<number, ReturnType<typeof setTimeout>>();
+
+  const clear = (id: number) => {
+    clearTimeout(timers.get(id));
+    timers.delete(id);
+  };
+
+  return {
+    clear,
+    schedule(id: number, sticky: boolean | undefined) {
+      // A replaced toast may have been auto-dismissing; its old timer must not close the new content.
+      clear(id);
+      if (!sticky) {
+        timers.set(
+          id,
+          setTimeout(() => {
+            timers.delete(id);
+            onExpire(id);
+          }, ms),
+        );
+      }
+    },
+  };
+}

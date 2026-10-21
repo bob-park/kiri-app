@@ -22,3 +22,9 @@ void test('errorDetail keeps the raw message only for codes whose text is generi
   assert.equal(errorDetail({ code: 'UNKNOWN', message: '' }), undefined);
   assert.equal(errorDetail({ code: 'INVALID_URL', message: 'not a YouTube URL' }), undefined);
 });
+
+void test('errorMessage maps an error.* message key (updater string errors) before the code', () => {
+  const withKey = { ...errors, NO_UPDATE: 'No update' } as unknown as Dict['errors'];
+  assert.equal(errorMessage({ code: 'UNKNOWN', message: 'error.no_update' }, withKey), 'No update');
+  assert.equal(errorDetail({ code: 'UNKNOWN', message: 'error.no_update' }), undefined);
+});
