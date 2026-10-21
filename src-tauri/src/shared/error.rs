@@ -15,6 +15,7 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("database schema version {found} is newer than supported version {supported}")]
     SchemaTooNew { found: i64, supported: i64 },
+    #[allow(dead_code)] // ponytail: first used by the queue domain (Task 4); drop the allow then
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]

@@ -1,5 +1,5 @@
 //! yt-dlp·Deno 준비 상태. 시작 시 그리고 한 시간마다 확인하고, yt-dlp 는 하루에 한 번 갱신한다.
-use crate::settings::SettingsState;
+use crate::{app::state::AppState, domain::settings};
 use kiri_core::{
     engine::{Engine, now_ms},
     tools,
@@ -59,10 +59,13 @@ pub async fn ensure(app: &AppHandle, force: bool) {
         return;
     }
     let paths = app.state::<Engine>().tools().clone();
-    let settings = app.state::<SettingsState>();
     let now = now_ms();
-    let need_ytdlp =
-        force || !paths.ytdlp.exists() || due(settings.get().update.last_ytdlp_check, now);
+    let need_ytdlp = force
+        || !paths.ytdlp.exists()
+        || due(
+            app.state::<AppState>().settings().update.last_ytdlp_check,
+            now,
+        );
 
     update(app, |s| {
         s.installing = true;
@@ -73,11 +76,8 @@ pub async fn ensure(app: &AppHandle, force: bool) {
     if need_ytdlp {
         match tools::ensure_ytdlp(&client, &paths.ytdlp).await {
             Ok(_) => {
-                let saved = settings.update(app, |s| {
-                    s.update.last_ytdlp_check = Some(now);
-                    Ok(())
-                });
-                if let Err(e) = saved {
+                let patch = serde_json::json!({ "update": { "last_ytdlp_check": now } });
+                if let Err(e) = settings::commands::patch_and_notify(app, &patch) {
                     eprintln!("kiri tools: cannot save last check: {e}");
                 }
             }
@@ -85,7 +85,7 @@ pub async fn ensure(app: &AppHandle, force: bool) {
         }
     }
     let version = tools::version(&paths.ytdlp).await;
-    let last_check = settings.get().update.last_ytdlp_check;
+    let last_check = app.state::<AppState>().settings().update.last_ytdlp_check;
     let ready = paths.ytdlp.exists() && paths.deno.exists();
     update(app, |s| {
         *s = ToolsStatus {

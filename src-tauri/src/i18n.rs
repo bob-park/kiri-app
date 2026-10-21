@@ -93,8 +93,8 @@ pub fn labels(lang: Lang) -> Labels {
 pub fn current(app: &tauri::AppHandle) -> Labels {
     use tauri::Manager;
     labels(resolve(
-        &app.state::<crate::settings::SettingsState>()
-            .get()
+        &app.state::<crate::app::state::AppState>()
+            .settings()
             .general
             .ui_language,
     ))

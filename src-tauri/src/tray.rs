@@ -1,6 +1,6 @@
 use crate::{
+    domain::settings::Settings,
     i18n::{self, Labels},
-    settings::Settings,
     windows,
 };
 use kiri_core::{engine::Engine, model::Job};

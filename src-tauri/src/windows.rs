@@ -1,4 +1,4 @@
-use crate::settings::SettingsState;
+use crate::app::state::AppState;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 pub const MAIN: &str = "main";
@@ -36,8 +36,8 @@ pub fn show_main(app: &AppHandle) -> Result<(), String> {
             // 창은 항상 살려 둔다. 닫기 = 숨기기 또는 앱 종료(확인 포함).
             api.prevent_close();
             if app_handle
-                .state::<SettingsState>()
-                .get()
+                .state::<AppState>()
+                .settings()
                 .general
                 .close_to_tray
             {

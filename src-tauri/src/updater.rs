@@ -1,6 +1,6 @@
 //! GitHub Releases 의 latest.json 으로 새 버전을 확인하고 설치한다.
 //! 창이 닫혀도 앱은 메뉴 막대에 살아 있으므로 주기 확인은 Rust 에서 돈다.
-use crate::{quit, settings::SettingsState};
+use crate::{app::state::AppState, quit};
 use kiri_core::{engine::Engine, model::Job};
 use serde::Serialize;
 use std::{
@@ -233,7 +233,7 @@ pub fn spawn_periodic(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_CHECK).await;
         loop {
-            if app.state::<SettingsState>().get().update.auto_check {
+            if app.state::<AppState>().settings().update.auto_check {
                 if let Err(e) = check(&app).await {
                     eprintln!("kiri update: check failed: {e}");
                 }

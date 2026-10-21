@@ -41,7 +41,7 @@ interface SettingsStore {
   subscribeBackend: () => () => void;
 }
 
-// settings-changed 는 호출자에게도 되돌아온다. 아직 디스크에 닿지 않은 패치는 에코 위에 다시 덮는다.
+// settings://changed 는 호출자에게도 되돌아온다. 아직 디스크에 닿지 않은 패치는 에코 위에 다시 덮는다.
 let pending = 0;
 let pendingPatch: DeepPartial<Settings> | null = null;
 
@@ -71,7 +71,7 @@ export const useSettings = create<SettingsStore>((set, get) => ({
     }
   },
   subscribeBackend: () => {
-    const p = listen<Settings>("settings-changed", (e) => {
+    const p = listen<Settings>("settings://changed", (e) => {
       set({ settings: pendingPatch ? mergeSettings(e.payload, pendingPatch) : e.payload });
     });
     return () => {

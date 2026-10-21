@@ -1,24 +1,28 @@
+mod app;
 mod bootstrap;
 mod cli_install;
 mod commands;
+mod domain;
 mod i18n;
 mod ipc_server;
 #[cfg(test)]
 mod pubkey_check;
 mod quit;
-mod settings;
-#[allow(dead_code)] // ponytail: unused until Task 3 wires settings/queue onto it; remove then
 mod shared;
 mod tray;
 mod updater;
 mod windows;
 
+use app::state::AppState;
+use domain::settings;
 use kiri_core::{
     engine::{Engine, EnginePaths},
     model::{Job, Tools},
 };
-use settings::SettingsState;
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// externalBin 은 실행 파일 옆(Contents/MacOS, dev 에서는 target/debug)에 놓인다.
@@ -46,9 +50,18 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let path = app.path();
-            app.manage(SettingsState::new(
-                path.app_config_dir()?.join("settings.json"),
-            ));
+            // ponytail: a DB that cannot be opened aborts setup; add a recovery dialog if
+            // users ever hit it.
+            let conn = shared::db::open(&path.app_local_data_dir()?.join("kiri.db"))?;
+            // A failed import keeps the JSON file in place and starts from defaults.
+            match settings::import_json(&conn, &path.app_config_dir()?.join("settings.json")) {
+                Ok(true) => log::info!("imported settings.json into the database"),
+                Ok(false) => {}
+                Err(e) => log::error!("settings.json import failed: {e}"),
+            }
+            app.manage(AppState {
+                db: Arc::new(Mutex::new(conn)),
+            });
             app.manage(bootstrap::ToolsState::default());
             app.manage(ipc_server::IpcState::default());
             app.manage(updater::UpdateState::default());
@@ -65,7 +78,7 @@ pub fn run() {
                 cache_dir: path.app_cache_dir()?,
                 log_dir: path.app_log_dir()?.join("jobs"),
             };
-            let config = settings::engine_config(&app.state::<SettingsState>().get());
+            let config = settings::engine_config(&app.state::<AppState>().settings());
             let rt = tauri::async_runtime::block_on(async { tokio::runtime::Handle::current() });
             let h = handle.clone();
             let engine = Engine::new(paths, tools, config, rt, move |jobs| {
@@ -83,8 +96,8 @@ pub fn run() {
         })
         .on_menu_event(tray::on_menu_event)
         .invoke_handler(tauri::generate_handler![
-            commands::get_settings,
-            commands::patch_settings,
+            settings::commands::get_settings,
+            settings::commands::patch_settings,
             commands::list_jobs,
             commands::probe,
             commands::add_job,

@@ -1,7 +1,6 @@
 use crate::{
     bootstrap::{self, ToolsState, ToolsStatus},
     cli_install::{self, CliStatus},
-    settings::{self, Settings, SettingsState},
 };
 use kiri_core::{
     engine::{Engine, EngineError},
@@ -38,27 +37,6 @@ impl From<String> for CmdError {
 }
 
 pub type CmdResult<T> = Result<T, CmdError>;
-
-#[tauri::command]
-pub fn get_settings(state: State<'_, SettingsState>) -> Settings {
-    state.get()
-}
-
-/// 부분 갱신. 전체 문서를 쓰면 동시 쓰기가 서로를 덮는다.
-#[tauri::command]
-pub fn patch_settings(
-    app: AppHandle,
-    state: State<'_, SettingsState>,
-    engine: State<'_, Engine>,
-    patch: serde_json::Value,
-) -> CmdResult<()> {
-    let next = state.update(&app, |s| {
-        *s = settings::apply_patch(s, &patch)?;
-        Ok(())
-    })?;
-    engine.set_config(settings::engine_config(&next));
-    Ok(())
-}
 
 #[tauri::command]
 pub fn list_jobs(engine: State<'_, Engine>) -> Vec<Job> {
