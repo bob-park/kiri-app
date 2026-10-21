@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import "./index.css";
+import "./app/globals.css";
 import { useSettings } from "./lib/settings";
 import { useQueue } from "./lib/queue";
 import { useTools } from "./lib/tools";

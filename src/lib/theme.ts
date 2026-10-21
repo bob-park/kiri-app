@@ -11,7 +11,7 @@ let current: Theme = "system";
 
 function apply() {
   const dark = resolveTheme(current, mq?.matches ?? false) === "dark";
-  document.documentElement.dataset.theme = dark ? "kiri" : "kiri-light";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
 
 export function applyTheme(pref: Theme) {
