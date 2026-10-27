@@ -22,16 +22,14 @@ cd kiri-app
 mise install                                  # Node 26, Yarn 4.18.1
 export GITHUB_NPM_AUTH_TOKEN=<GitHub PAT>     # read:packages 권한 — @bob-park/* (ESLint/Prettier 설정) 설치용
 yarn install
-yarn sidecars                                 # ffmpeg/ffprobe + kiri CLI 를 src-tauri/binaries/ 에 준비
+yarn sidecars                                 # kiri CLI 를 src-tauri/binaries/ 에 준비
 ```
 
 - `@bob-park/*` 패키지는 GitHub Packages에서 받는다(`.yarnrc.yml`의 `npmScopes`). 토큰이 없으면 `yarn install`이 실패한다. 셸 프로필에 `export`해 두면 편하다.
 - 전역 Yarn 1.x로 실행하면 `yarn.lock`이 Yarn 1 형식으로 통째로 바뀐다. `yarn --version`이 4.18.1인지 확인한다.
-- `yarn sidecars`는 두 가지를 `src-tauri/binaries/`(git에 넣지 않음)에 준비한다.
-  - ffmpeg/ffprobe arm64 정적 빌드: `scripts/fetch-ffmpeg.sh`가 받는다. URL과 SHA256은 `scripts/ffmpeg.lock`에 고정되어 있고, 필요한 인코더가 모두 들어 있는지도 검사한다.
-  - `kiri` CLI 릴리스 빌드: `scripts/build-cli.sh`가 만들어 `kiri-cli-aarch64-apple-darwin`으로 복사한다.
+- `yarn sidecars`는 `kiri` CLI 릴리스 빌드를 `src-tauri/binaries/`(git에 넣지 않음)에 준비한다. `scripts/build-cli.sh`가 만들어 `kiri-cli-aarch64-apple-darwin`으로 복사한다.
+- yt-dlp, FFmpeg(ffmpeg/ffprobe), Deno는 번들에 넣지 않는다. 앱이 처음 실행될 때 `<app data>/bin/`에 받고(SHA256 확인), 업데이트는 설정 → 업데이트에서 사용자가 직접 한다.
 - **새로 clone 했다면 `cargo build`, `cargo test`, `yarn tauri dev`보다 먼저 `yarn sidecars`를 실행한다.** Tauri가 빌드할 때 `externalBin` 파일이 있는지 검사하므로, 없으면 빌드가 실패한다.
-- ffmpeg 버전을 올릴 때는 `sh scripts/fetch-ffmpeg.sh --update`로 `scripts/ffmpeg.lock`을 갱신하고 커밋한다.
 
 ## 개발 실행
 
@@ -126,7 +124,7 @@ security add-generic-password -a "$USER" -s tauri-updater-kiri-pw -w '<키 암�
 ```
 Cargo.toml                    # 워크스페이스: crates/kiri-core, crates/kiri-cli, src-tauri
 crates/kiri-core/             # Tauri 비의존 엔진: 작업 모델, 큐(Engine, QueueStore), 다운로드 파이프라인,
-                              # yt-dlp/ffmpeg 인자·파서, 프로세스 실행, yt-dlp·Deno 설치, CLI 소켓 프로토콜
+                              # yt-dlp/ffmpeg 인자·파서, 프로세스 실행, yt-dlp·FFmpeg·Deno 설치, CLI 소켓 프로토콜
 crates/kiri-cli/              # `kiri` CLI. 실행 중인 앱과 Unix 소켓으로 통신
 src/                          # React (Vite SPA). 창 라벨(main/settings)로 화면을 고른다
 ├─ app/                       # main.tsx(진입점), App.tsx(메인 창), globals.css(색·토큰은 여기에만), settings/(설정 창)
@@ -142,7 +140,7 @@ src-tauri/
    ├─ app/                    # 앱 껍데기: state, windows, tray(+앱 메뉴), updater, quit, cli_install, ipc_server, i18n(네이티브 라벨)
    ├─ domain/<name>/          # settings, queue: mod.rs(공개 API) · model.rs · repository.rs(SQL) · commands.rs / tools: mod.rs · commands.rs
    └─ shared/                 # db.rs(열기·마이그레이션), migrations/*.sql, error.rs(AppError)
-scripts/                      # fetch-ffmpeg.sh + ffmpeg.lock, build-cli.sh, release-macos.sh, load-updater-key-macos.sh, latest-json.mjs
+scripts/                      # build-cli.sh, release-macos.sh, load-updater-key-macos.sh, latest-json.mjs
 bump-version-up.sh            # 버전 올림 (master 머지 때 GitHub Actions가 실행)
 docs/agents/                  # 에이전트용 규칙 (AGENTS.md에서 시작)
 docs/design/                  # 디자인 기준: aurora-glass.md, kraken-design.md

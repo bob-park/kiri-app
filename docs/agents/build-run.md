@@ -10,7 +10,7 @@ related:
 
 # Build & Run
 
-> Run `yarn sidecars` once after cloning (ffmpeg/ffprobe + the `kiri` CLI), then `yarn tauri dev` runs the app with hot reload. `yarn tauri build --no-bundle` checks a release compile without signing keys. Releases go through `scripts/release-macos.sh` ([release](./workflow/release.md)).
+> Run `yarn sidecars` once after cloning (the `kiri` CLI), then `yarn tauri dev` runs the app with hot reload. `yarn tauri build --no-bundle` checks a release compile without signing keys. Releases go through `scripts/release-macos.sh` ([release](./workflow/release.md)).
 
 ## Setup
 
@@ -18,12 +18,12 @@ related:
 mise install
 export GITHUB_NPM_AUTH_TOKEN=…   # read:packages, for @bob-park/* lint configs
 mise exec -- yarn install
-mise exec -- yarn sidecars       # src-tauri/binaries/: ffmpeg, ffprobe, kiri-cli
+mise exec -- yarn sidecars       # src-tauri/binaries/: kiri-cli
 ```
 
 - Always use Yarn 4.18.1 (mise). A global Yarn 1 rewrites `yarn.lock`.
 - Tauri checks `externalBin` at build time, so `cargo build`, `cargo test` and `yarn tauri dev` fail until `yarn sidecars` has run.
-- To bump ffmpeg: `sh scripts/fetch-ffmpeg.sh --update` rewrites `scripts/ffmpeg.lock`; commit it.
+- yt-dlp, FFmpeg and Deno are not build inputs: the app downloads them into `<app data>/bin/` on first launch and updates them from Settings → Updates.
 
 ## Commands
 
@@ -34,7 +34,7 @@ mise exec -- yarn sidecars       # src-tauri/binaries/: ffmpeg, ffprobe, kiri-cl
 | `yarn tauri build --bundles app,dmg` | `.app` + `.dmg` + updater artifacts; needs `TAURI_SIGNING_PRIVATE_KEY` (first `source scripts/load-updater-key-macos.sh`) |
 | `scripts/release-macos.sh --build-only` | Developer ID signed `.app` + `.dmg`, both notarized and stapled with the App Store Connect API key; no upload ([configuration](./configuration.md#secrets)) |
 | `yarn build` | frontend only (`tsc` + `vite build`) |
-| `yarn sidecars` | `scripts/fetch-ffmpeg.sh` + `scripts/build-cli.sh` |
+| `yarn sidecars` | `scripts/build-cli.sh` |
 | `yarn prettier` | format `src/` |
 
 Build output goes to the workspace `target/` (not `src-tauri/target/`).

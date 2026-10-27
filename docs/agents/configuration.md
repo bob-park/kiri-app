@@ -21,7 +21,7 @@ related:
 | `app.windows` | empty: `main` and `settings` are built in `app/windows.rs` after state exists |
 | `app.security.csp` | `img-src` allows `https:` for YouTube thumbnails |
 | `bundle.targets` | `app`, `dmg` |
-| `bundle.externalBin` | `binaries/ffmpeg`, `binaries/ffprobe`, `binaries/kiri-cli` ([build-run](./build-run.md#setup)) |
+| `bundle.externalBin` | `binaries/kiri-cli` ([build-run](./build-run.md#setup)) |
 | `bundle.macOS` | `minimumSystemVersion` 14.2, hardened runtime |
 | `bundle.createUpdaterArtifacts` | `true` — bundle builds need the signing key |
 | `plugins.updater.pubkey` | public half of the updater key. `build.rs` fails a release build when it is empty ([release](../release.md)) |
