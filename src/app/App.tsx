@@ -11,15 +11,16 @@ import { useCompletedClear, useJobs, useUrlAdd } from '@/domain/queue/queries/qu
 import { openSettings } from '@/domain/settings/apis/settings';
 import type { Settings } from '@/domain/settings/apis/settings.dto';
 import { SETTINGS_QUERY_KEY, useSettings } from '@/domain/settings/queries/settings';
+import { checkYtdlpUpdate } from '@/domain/tools/apis/tools';
 import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
-import { TOOLS_QUERY_KEY, useToolsInstall, useToolsStatus } from '@/domain/tools/queries/tools';
+import { TOOLS_QUERY_KEY, useToolsInstall, useToolsStatus, useToolsUpdate } from '@/domain/tools/queries/tools';
 import type { AppError } from '@/shared/api/common.dto';
 import Icon from '@/shared/components/Icon';
 import StatusBar from '@/shared/components/StatusBar';
 import useI18n from '@/shared/hooks/useI18n';
 import { useStore } from '@/shared/store/rootStore';
 import { extractUrl, isEditableTarget } from '@/utils/paste';
-import { toolsToast } from '@/utils/tools';
+import { newlyFailedYoutube, toolsToast } from '@/utils/tools';
 
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -39,6 +40,12 @@ export default function App() {
   const sheetUrl = useRef<string | null>(null);
   // A second paste before the first (readText · addUrl) finished is dropped (no duplicate jobs).
   const inFlight = useRef(false);
+  // The yt-dlp version already hinted this session (once per latest version).
+  const hinted = useRef<string | null>(null);
+  // Each job's last seen state kind, to spot a youtube job failing now (not one restored failed).
+  const seen = useRef<ReadonlyMap<number, string>>(new Map());
+  // The first render's keydown closure reaches `maybeHintYtdlp`; it reads the current language here.
+  const latestT = useRef<typeof t | null>(null);
 
   // state
   const [sheet, setSheet] = useState<SheetState | null>(null);
@@ -58,10 +65,12 @@ export default function App() {
   const { jobs } = useJobs();
   const { status: tools } = useToolsStatus();
   const { installTools } = useToolsInstall();
+  const { updateTools } = useToolsUpdate();
   const { addUrl } = useUrlAdd();
   const { clearCompleted } = useCompletedClear();
 
   sheetUrl.current = sheet?.url ?? null;
+  latestT.current = t;
   const toolsState = toolsToast(tools);
   const toolsError = tools?.error ?? '';
   const toolsInstalling = tools?.installing ?? '';
@@ -90,6 +99,15 @@ export default function App() {
       });
     }
   }, [toolsState, toolsError, toolsInstalling, t]);
+
+  // A youtube job failing now may be fixed by a newer yt-dlp.
+  useEffect(() => {
+    const r = newlyFailedYoutube(seen.current, jobs);
+    seen.current = r.seen;
+    if (r.failed) {
+      void maybeHintYtdlp();
+    }
+  }, [jobs]);
 
   // The handlers below only use refs, state setters and stable hook results, so the first render's are enough.
   useEffect(() => {
@@ -129,6 +147,9 @@ export default function App() {
       if (!url) {
         return showError({ code: 'INVALID_URL', message: '' });
       }
+      if (!navigator.onLine) {
+        return showError({ code: 'OFFLINE', message: '' });
+      }
       if (!queryClient.getQueryData<ToolsStatus>(TOOLS_QUERY_KEY)?.ready) {
         return showError({ code: 'YTDLP_MISSING', message: '' });
       }
@@ -155,8 +176,26 @@ export default function App() {
       setSheet((cur) => (cur?.url === url ? null : cur));
       if (current) {
         showError(e as AppError);
+        void maybeHintYtdlp();
       }
     }
+  };
+
+  // Uses only refs and stable store/mutation functions, so a first-render closure is safe.
+  const maybeHintYtdlp = async () => {
+    const version = await checkYtdlpUpdate().catch(() => null);
+    const tr = latestT.current;
+    if (!version || version === hinted.current || !tr) {
+      return;
+    }
+    pushToast({
+      key: 'ytdlp-hint',
+      kind: 'info',
+      text: tr.app.ytdlpHintTitle,
+      desc: tr.app.ytdlpHintDesc,
+      action: { label: tr.settings.update.update, run: () => updateTools(['yt-dlp']) },
+    });
+    hinted.current = version;
   };
 
   // ⌘V. Ignored while a sheet is open.

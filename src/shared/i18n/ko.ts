@@ -9,6 +9,8 @@ export const ko: Dict = {
     toolsPreparingDesc: '처음 실행할 때 필요한 구성 요소를 내려받고 있습니다. 잠시만 기다려 주세요.',
     toolsFailed: (error) => `다운로드 준비에 실패했습니다: ${error}`,
     retry: '재시도',
+    ytdlpHintTitle: '다운로드가 실패했어요',
+    ytdlpHintDesc: '새 yt-dlp가 있어요. 업데이트하면 해결될 수 있어요.',
   },
   toast: { close: '닫기' },
   job: {
@@ -128,6 +130,7 @@ export const ko: Dict = {
     },
   },
   errors: {
+    OFFLINE: '인터넷에 연결되어 있지 않습니다',
     UNKNOWN: '문제가 발생했습니다',
     INVALID_INPUT: '허용되지 않는 값입니다',
     DB: '데이터베이스에 저장하지 못했습니다',

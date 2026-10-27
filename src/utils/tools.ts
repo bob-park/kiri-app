@@ -1,4 +1,5 @@
-// Type-only import: erased at runtime, so node --test needs no alias resolution.
+// Type-only imports: erased at runtime, so node --test needs no alias resolution.
+import type { Job } from '@/domain/queue/apis/queue.dto';
 import type { ToolInfo, ToolName, ToolsStatus } from '@/domain/tools/apis/tools.dto';
 
 export type ToolsToast = 'hidden' | 'preparing' | 'failed';
@@ -47,4 +48,19 @@ export function toolsToast(s: ToolsStatus | null | undefined): ToolsToast {
   }
 
   return s.error ? 'failed' : 'hidden';
+}
+
+/**
+ * Whether a youtube job seen non-failed this session has failed now. Jobs restored already
+ * failed are not in `seen`, so they never count. The returned `seen` records every current job.
+ */
+export function newlyFailedYoutube(
+  seen: ReadonlyMap<number, string>,
+  jobs: Job[],
+): { failed: boolean; seen: Map<number, string> } {
+  const failed = jobs.some(
+    (j) => j.source.kind === 'youtube' && j.state.kind === 'failed' && seen.has(j.id) && seen.get(j.id) !== 'failed',
+  );
+
+  return { failed, seen: new Map(jobs.map((j) => [j.id, j.state.kind])) };
 }

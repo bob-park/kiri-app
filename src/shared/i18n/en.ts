@@ -8,6 +8,8 @@ export const en = {
     toolsPreparingDesc: 'Downloading the components kiri needs on first launch. This takes a moment.',
     toolsFailed: (error: string) => `Couldn't get ready to download: ${error}`,
     retry: 'Retry',
+    ytdlpHintTitle: 'Download failed',
+    ytdlpHintDesc: 'A newer yt-dlp is available. Updating may fix it.',
   },
   toast: { close: 'Close' },
   job: {
@@ -135,6 +137,7 @@ export const en = {
   },
   /** Keyed by `AppError.code` (src-tauri/src/shared/error.rs) and by the uppercased legacy `error.*` message keys. */
   errors: {
+    OFFLINE: "You're offline",
     UNKNOWN: 'Something went wrong',
     INVALID_INPUT: "That value isn't allowed",
     DB: "Couldn't save to the database",

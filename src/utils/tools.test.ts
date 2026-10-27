@@ -1,9 +1,10 @@
+import type { Job } from '@/domain/queue/apis/queue.dto';
 import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { pendingUpdates, toolState, toolsSummary, toolsToast } from './tools.ts';
+import { newlyFailedYoutube, pendingUpdates, toolState, toolsSummary, toolsToast } from './tools.ts';
 
 const st = (p: Partial<ToolsStatus>): ToolsStatus => ({
   ready: false,
@@ -60,4 +61,28 @@ void test('toolsSummary claims up to date only when some latest is known', () =>
   assert.equal(toolsSummary(st({ ytdlp: { current: 'a', latest: null } })), 'unknown');
   assert.equal(toolsSummary(st({ ytdlp: { current: 'a', latest: 'a' } })), 'upToDate');
   assert.equal(toolsSummary(st({ deno: { current: 'a', latest: 'b' } })), 'updates');
+});
+
+const job = (id: number, source: 'youtube' | 'file', state: Job['state']): Job =>
+  ({
+    id,
+    source: source === 'youtube' ? { kind: 'youtube', url: 'u' } : { kind: 'file', path: 'p', output_dir: null },
+    state,
+  }) as Job;
+
+void test('newlyFailedYoutube: restored failed jobs do not count', () => {
+  const r = newlyFailedYoutube(new Map(), [job(1, 'youtube', { kind: 'failed', message: 'x' })]);
+  assert.equal(r.failed, false);
+});
+
+void test('newlyFailedYoutube: a youtube job failing now counts', () => {
+  const r = newlyFailedYoutube(new Map([[1, 'downloading']]), [job(1, 'youtube', { kind: 'failed', message: 'x' })]);
+  assert.equal(r.failed, true);
+  assert.deepEqual(r.seen, new Map([[1, 'failed']]));
+  assert.equal(newlyFailedYoutube(r.seen, [job(1, 'youtube', { kind: 'failed', message: 'x' })]).failed, false);
+});
+
+void test('newlyFailedYoutube: file jobs never count', () => {
+  const r = newlyFailedYoutube(new Map([[2, 'encoding']]), [job(2, 'file', { kind: 'failed', message: 'x' })]);
+  assert.equal(r.failed, false);
 });
