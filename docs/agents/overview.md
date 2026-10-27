@@ -15,7 +15,7 @@ related:
 ## What it is
 
 - **The app** (`src-tauri` + `src/`): a `main` window (queue, options sheet) and a `settings` window (General / Download / CLI / Updates), a menu-bar tray, auto-update from GitHub Releases.
-- **The engine** (`crates/kiri-core`): Tauri-free queue, download pipeline (yt-dlp → ffmpeg → move), tool installer (yt-dlp, Deno), CLI socket protocol.
+- **The engine** (`crates/kiri-core`): Tauri-free queue, download pipeline (yt-dlp → ffmpeg → move), tool installer (yt-dlp, FFmpeg, Deno; missing ones installed at startup, updates manual), CLI socket protocol.
 - **The CLI** (`crates/kiri-cli`, binary `kiri`): bundled as a sidecar and linked to `/usr/local/bin/kiri` from Settings → CLI. It talks to the running app over a Unix socket.
 - **Storage:** one SQLite file, `kiri.db`, for settings and the queue.
 

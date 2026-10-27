@@ -95,9 +95,9 @@ Dependencies point one way: `commands → domain core → shared`, and anything 
 
 1. Plugins: single-instance (must be first; a second launch calls `windows::show_main`), log, opener, dialog, clipboard-manager, updater.
 2. Open + migrate `kiri.db`, import legacy JSON, then `manage` `AppState`, `IpcState`, `UpdateState`, `ToolsState`.
-3. Build the `Engine` with `SqliteQueueStore`, tool paths (sidecars + `<app data>/bin`) and the settings-derived config; `manage` it.
+3. Build the `Engine` with `SqliteQueueStore`, tool paths (all in `<app data>/bin/`) and the settings-derived config; `manage` it.
 4. Show the `main` window, build the tray and the macOS app menu.
-5. Start the engine, the IPC server, the tools loop (yt-dlp/Deno ensured now and every hour; yt-dlp updated at most daily) and the periodic updater.
+5. Start the engine, the IPC server, the one-time tools install (`tools::commands::spawn`: downloads whichever of yt-dlp, FFmpeg, Deno is missing, then kicks the engine) and the periodic updater. The engine holds queued jobs (restored ones included) until every tool file exists. Tool updates are never checked at startup: only from Settings → Updates or after a failed download (the yt-dlp hint), and installed only on request.
 
 ## Windows
 
