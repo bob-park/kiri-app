@@ -20,7 +20,7 @@ import StatusBar from '@/shared/components/StatusBar';
 import useI18n from '@/shared/hooks/useI18n';
 import { useStore } from '@/shared/store/rootStore';
 import { extractUrl, isEditableTarget } from '@/utils/paste';
-import { newlyFailedYoutube, toolsToast } from '@/utils/tools';
+import { newlyFailedYoutube, toolsToast, updateOutcome } from '@/utils/tools';
 
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -193,9 +193,45 @@ export default function App() {
       kind: 'info',
       text: tr.app.ytdlpHintTitle,
       desc: tr.app.ytdlpHintDesc,
-      action: { label: tr.settings.update.update, run: () => updateTools(['yt-dlp']) },
+      action: { label: tr.settings.update.update, run: handleHintUpdate },
     });
     hinted.current = version;
+  };
+
+  // The hint's Update: refused offline, else the hint becomes a progress toast, then the result.
+  // Like `maybeHintYtdlp`, it runs from a first-render closure, so it reads only refs and stable functions.
+  const handleHintUpdate = () => {
+    const tr = latestT.current;
+    if (!tr) {
+      return;
+    }
+    if (!navigator.onLine) {
+      return showError({ code: 'OFFLINE', message: '' });
+    }
+    pushToast({
+      key: 'ytdlp-hint',
+      kind: 'progress',
+      sticky: true,
+      progress: null,
+      text: tr.app.toolsInstalling('yt-dlp'),
+    });
+    updateTools(['yt-dlp'], {
+      onSuccess: (status) => {
+        const cur = latestT.current ?? tr; // the language may have changed meanwhile
+        const outcome = updateOutcome(status);
+        if (outcome.kind === 'failed') {
+          pushToast({ key: 'ytdlp-hint', kind: 'error', text: cur.app.ytdlpUpdateFailed(outcome.error) });
+        } else {
+          pushToast({
+            key: 'ytdlp-hint',
+            kind: 'info',
+            text: outcome.kind === 'updated' ? cur.app.ytdlpUpdated : cur.app.toolsBusy,
+          });
+        }
+      },
+      // ErrorAlert shows the error.
+      onError: () => dismissToastByKey('ytdlp-hint'),
+    });
   };
 
   // ⌘V. Ignored while a sheet is open.

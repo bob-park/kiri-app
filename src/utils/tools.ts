@@ -64,3 +64,14 @@ export function newlyFailedYoutube(
 
   return { failed, seen: new Map(jobs.map((j) => [j.id, j.state.kind])) };
 }
+
+export type UpdateOutcome = { kind: 'updated' } | { kind: 'busy' } | { kind: 'failed'; error: string };
+
+/** The hint toast's update result. `null` status: another install or check held the guard, nothing ran. */
+export function updateOutcome(s: ToolsStatus | null): UpdateOutcome {
+  if (!s) {
+    return { kind: 'busy' };
+  }
+
+  return s.error ? { kind: 'failed', error: s.error } : { kind: 'updated' };
+}

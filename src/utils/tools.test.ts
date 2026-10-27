@@ -4,7 +4,7 @@ import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { newlyFailedYoutube, pendingUpdates, toolState, toolsSummary, toolsToast } from './tools.ts';
+import { newlyFailedYoutube, pendingUpdates, toolState, toolsSummary, toolsToast, updateOutcome } from './tools.ts';
 
 const st = (p: Partial<ToolsStatus>): ToolsStatus => ({
   ready: false,
@@ -85,4 +85,10 @@ void test('newlyFailedYoutube: a youtube job failing now counts', () => {
 void test('newlyFailedYoutube: file jobs never count', () => {
   const r = newlyFailedYoutube(new Map([[2, 'encoding']]), [job(2, 'file', { kind: 'failed', message: 'x' })]);
   assert.equal(r.failed, false);
+});
+
+void test('updateOutcome: busy when nothing ran, failed with the install error, else updated', () => {
+  assert.deepEqual(updateOutcome(null), { kind: 'busy' });
+  assert.deepEqual(updateOutcome(st({ ready: true, error: 'net down' })), { kind: 'failed', error: 'net down' });
+  assert.deepEqual(updateOutcome(st({ ready: true })), { kind: 'updated' });
 });

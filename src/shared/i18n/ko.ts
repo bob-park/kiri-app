@@ -11,6 +11,9 @@ export const ko: Dict = {
     retry: '재시도',
     ytdlpHintTitle: '다운로드가 실패했어요',
     ytdlpHintDesc: '새 yt-dlp가 있어요. 업데이트하면 해결될 수 있어요.',
+    ytdlpUpdated: 'yt-dlp를 업데이트했어요',
+    ytdlpUpdateFailed: (error) => `yt-dlp를 업데이트하지 못했어요: ${error}`,
+    toolsBusy: '다른 구성 요소 작업이 진행 중이에요. 잠시 후 다시 시도해 주세요.',
   },
   toast: { close: '닫기' },
   job: {

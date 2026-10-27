@@ -10,6 +10,9 @@ export const en = {
     retry: 'Retry',
     ytdlpHintTitle: 'Download failed',
     ytdlpHintDesc: 'A newer yt-dlp is available. Updating may fix it.',
+    ytdlpUpdated: 'yt-dlp updated',
+    ytdlpUpdateFailed: (error: string) => `Couldn't update yt-dlp: ${error}`,
+    toolsBusy: 'Another component task is running. Try again shortly.',
   },
   toast: { close: 'Close' },
   job: {

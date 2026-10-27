@@ -74,7 +74,7 @@ export function useToolUpdateCheck(installing: ToolName | null | undefined) {
 }
 
 export function useToolsUpdate() {
-  const { mutate, isPending } = useMutation<void, AppError, ToolName[]>({
+  const { mutate, isPending } = useMutation<ToolsStatus | null, AppError, ToolName[]>({
     mutationKey: ['tools', 'status', 'update'],
     mutationFn: updateTools,
   });

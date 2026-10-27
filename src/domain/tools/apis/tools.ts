@@ -20,7 +20,7 @@ export async function checkYtdlpUpdate() {
   return call<string | null>('check_ytdlp_update');
 }
 
-/** Installs `names`. Progress arrives as `tools://changed`. */
+/** Installs `names`. Progress arrives as `tools://changed`. Resolves to the status afterwards, or `null` when busy. */
 export async function updateTools(names: ToolName[]) {
-  return call<void>('update_tools', { names });
+  return call<ToolsStatus | null>('update_tools', { names });
 }
