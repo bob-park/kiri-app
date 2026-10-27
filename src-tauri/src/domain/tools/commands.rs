@@ -35,15 +35,16 @@ pub async fn install_tools(app: AppHandle) -> AppResult<()> {
 }
 
 /// Installs `names`, each from the release the last check resolved (or the latest one).
+/// Returns the status afterwards, or `None` when another install or check was running.
 #[tauri::command]
-pub async fn update_tools(app: AppHandle, names: Vec<ToolName>) -> AppResult<()> {
+pub async fn update_tools(app: AppHandle, names: Vec<ToolName>) -> AppResult<Option<ToolsStatus>> {
     let state = app.state::<ToolsState>();
     let Some(_busy) = state.try_busy() else {
-        return Ok(());
+        return Ok(None);
     };
     let paths = app.state::<Engine>().tools().clone();
     install_all(&app, &paths, &names).await;
-    Ok(())
+    Ok(Some(state.get()))
 }
 
 /// Resolves the latest release of every tool. A failed check is silent and keeps the old `latest`.
@@ -117,7 +118,8 @@ fn record(app: &AppHandle, tool: ToolName, release: Release) {
     update(app, |s| s.info_mut(tool).latest = Some(version));
 }
 
-/// Installs `names` in order (the caller holds `busy`), then refreshes versions and `ready`.
+/// Installs `names` in order (the caller holds `busy`), then refreshes versions and `ready`
+/// and kicks the engine.
 /// Each tool installs the release a check stored, or the latest one if none is stored.
 async fn install_all(app: &AppHandle, paths: &Tools, names: &[ToolName]) {
     let state = app.state::<ToolsState>();
@@ -159,6 +161,7 @@ async fn install_all(app: &AppHandle, paths: &Tools, names: &[ToolName]) {
         s.installing = None;
         s.error = error;
     });
+    app.state::<Engine>().start(); // runs queued jobs held while a tool was missing
 }
 
 fn update(app: &AppHandle, f: impl FnOnce(&mut ToolsStatus)) {

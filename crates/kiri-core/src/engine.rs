@@ -4,7 +4,7 @@ use crate::{
     model::{Job, JobOptions, JobSource, JobState, NewJob, Preset, Tools},
     pipeline::{self, PipelineCfg, PipelineError, Report, Stage},
     queue::{QueueState, QueueStore},
-    runner,
+    runner, tools,
     ytdlp::{self, VideoInfo},
 };
 use std::{
@@ -152,7 +152,8 @@ impl Engine {
         engine
     }
 
-    /// Starts running queued jobs. Call once after setup (once the listener is ready).
+    /// Starts running queued jobs. Call after setup (once the listener is ready) and again
+    /// once missing tools are installed: until then queued jobs stay queued.
     pub fn start(&self) {
         self.pump();
     }
@@ -472,8 +473,15 @@ impl Engine {
         (self.0.listener)(&jobs);
     }
 
-    /// Starts as many queued jobs as there are free slots.
+    /// Starts as many queued jobs as there are free slots. Starts nothing while a tool file is
+    /// missing (first launch, before the installer finishes); `start` re-pumps afterwards.
     fn pump(&self) {
+        if !tools::ALL_TOOLS
+            .into_iter()
+            .all(|t| tools::is_installed(t, &self.0.tools))
+        {
+            return;
+        }
         loop {
             if self.0.shutting_down.load(Ordering::SeqCst) {
                 return;
@@ -1440,6 +1448,20 @@ mod tests {
             .collect();
         names.sort();
         assert_eq!(names, vec!["clip-1", "clip-2"]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn queued_job_waits_for_missing_tools() {
+        let e = env(FAKE_YTDLP_DOWNLOAD, 2);
+        let ffmpeg = e.engine.tools().ffmpeg.clone();
+        fs::remove_file(&ffmpeg).unwrap();
+        e.engine.add(new_job("a")).unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(state_of(&e.engine, 1), JobState::Queued);
+        assert!(e.engine.0.running.lock().unwrap().is_empty());
+        testutil::script(ffmpeg.parent().unwrap(), "ffmpeg", FAKE_FFMPEG);
+        e.engine.start();
+        wait_for(&e.engine, |j| j[0].state == JobState::Completed).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
