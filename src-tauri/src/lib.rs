@@ -4,7 +4,7 @@ mod app;
 mod domain;
 mod shared;
 
-use app::{cli_install, ipc_server, quit, sidecar, state::AppState, tray, updater, windows};
+use app::{cli_install, ipc_server, quit, state::AppState, tray, updater, windows};
 use domain::{queue, settings, tools};
 use kiri_core::{
     engine::{Engine, EnginePaths},
@@ -68,10 +68,14 @@ pub fn run() {
             let tool_paths = Tools {
                 ytdlp: bin.join("yt-dlp"),
                 deno: bin.join("deno"),
-                ffmpeg: sidecar("ffmpeg"),
-                ffprobe: sidecar("ffprobe"),
+                ffmpeg: bin.join("ffmpeg"),
+                ffprobe: bin.join("ffprobe"),
             };
-            app.manage(tools::ToolsState::new(tools::initial_status(&tool_paths)));
+            let last_check = app.state::<AppState>().settings().update.last_ytdlp_check;
+            app.manage(tools::ToolsState::new(tools::ToolsStatus {
+                last_check,
+                ..tools::initial_status(&tool_paths)
+            }));
             let paths = EnginePaths {
                 store,
                 cache_dir: path.app_cache_dir()?,
@@ -106,6 +110,9 @@ pub fn run() {
             queue::commands::restart_job,
             queue::commands::clear_completed,
             tools::commands::tools_status,
+            tools::commands::install_tools,
+            tools::commands::check_tool_updates,
+            tools::commands::check_ytdlp_update,
             tools::commands::update_tools,
             updater::update_status,
             updater::check_update,

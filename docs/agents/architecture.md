@@ -17,7 +17,7 @@ related:
 
 | Crate | Path | Depends on | Holds |
 | ----- | ---- | ---------- | ----- |
-| `kiri-core` | `crates/kiri-core` | — (no `tauri`, no `rusqlite`) | `model` (Job, Preset, Tools), `engine` (queue + concurrent runs + cancellation), `pipeline` (yt-dlp → ffmpeg → move), `ytdlp`/`ffmpeg` (args and output parsers), `runner` (child processes, process-group kill), `files`, `tools` (yt-dlp/Deno installer), `ipc` (CLI socket protocol), `queue` (`QueueState`, the `QueueStore` trait) |
+| `kiri-core` | `crates/kiri-core` | — (no `tauri`, no `rusqlite`) | `model` (Job, Preset, Tools), `engine` (queue + concurrent runs + cancellation), `pipeline` (yt-dlp → ffmpeg → move), `ytdlp`/`ffmpeg` (args and output parsers), `runner` (child processes, process-group kill), `files`, `tools` (yt-dlp/FFmpeg/Deno releases and installer), `ipc` (CLI socket protocol), `queue` (`QueueState`, the `QueueStore` trait) |
 | `kiri-cli` | `crates/kiri-cli` | `kiri-core` | the `kiri` CLI: `status`, `list`, `add`, `stop`, `remove`, `transcode` over the socket |
 | `kiri-app` (lib `kiri_lib`) | `src-tauri` | `kiri-core`, Tauri | app shell, domains (`settings`, `queue`, `tools`), SQLite |
 
@@ -25,14 +25,13 @@ The CLI and the app cannot merge: the CLI is a separate process that talks to th
 
 ### Sidecars
 
-`tauri.conf.json` `bundle.externalBin` ships three binaries next to the app executable (`app::sidecar(name)` resolves them):
+`tauri.conf.json` `bundle.externalBin` ships one binary next to the app executable (`app::sidecar(name)` resolves it):
 
-- `ffmpeg`, `ffprobe` — static arm64 builds fetched by `scripts/fetch-ffmpeg.sh` (URL + SHA256 pinned in `scripts/ffmpeg.lock`).
 - `kiri-cli` — `scripts/build-cli.sh` builds `kiri-cli` in release mode. Settings → CLI links it to `/usr/local/bin/kiri` (`app/cli_install.rs`).
 
-`yarn sidecars` runs both scripts into `src-tauri/binaries/` (git-ignored). Tauri's build checks that they exist, so run it before the first build.
+`yarn sidecars` runs it into `src-tauri/binaries/` (git-ignored). Tauri's build checks that it exists, so run it before the first build.
 
-yt-dlp and Deno are **not** bundled: `kiri-core::tools` downloads them (SHA256-verified) into `<app data>/bin/` at startup.
+yt-dlp, FFmpeg (ffmpeg + ffprobe) and Deno are **not** bundled. On first launch `install_tools` downloads whichever is missing (SHA256-verified) into `<app data>/bin/`. Startup never checks for updates; Settings → Updates checks (`check_tool_updates`) and updates (`update_tools`) on request. Sources: GitHub Releases (yt-dlp, Deno) and ffmpeg.martin-riedl.de (FFmpeg).
 
 ## Request paths
 
@@ -96,9 +95,9 @@ Dependencies point one way: `commands → domain core → shared`, and anything 
 
 1. Plugins: single-instance (must be first; a second launch calls `windows::show_main`), log, opener, dialog, clipboard-manager, updater.
 2. Open + migrate `kiri.db`, import legacy JSON, then `manage` `AppState`, `IpcState`, `UpdateState`, `ToolsState`.
-3. Build the `Engine` with `SqliteQueueStore`, tool paths (sidecars + `<app data>/bin`) and the settings-derived config; `manage` it.
+3. Build the `Engine` with `SqliteQueueStore`, tool paths (all in `<app data>/bin/`) and the settings-derived config; `manage` it.
 4. Show the `main` window, build the tray and the macOS app menu.
-5. Start the engine, the IPC server, the tools loop (yt-dlp/Deno ensured now and every hour; yt-dlp updated at most daily) and the periodic updater.
+5. Start the engine, the IPC server, the one-time tools install (`tools::commands::spawn`: downloads whichever of yt-dlp, FFmpeg, Deno is missing, then kicks the engine) and the periodic updater. The engine holds queued jobs (restored ones included) until every tool file exists. Tool updates are never checked at startup: only from Settings → Updates or after a failed download (the yt-dlp hint), and installed only on request.
 
 ## Windows
 

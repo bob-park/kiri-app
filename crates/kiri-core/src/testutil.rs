@@ -39,7 +39,7 @@ mkdir -p "$(dirname "$last")"
 pub fn tools(dir: &Path, ytdlp_body: &str, ffmpeg_body: &str) -> Tools {
     Tools {
         ytdlp: script(dir, "yt-dlp", ytdlp_body),
-        deno: dir.join("deno"),
+        deno: script(dir, "deno", "echo deno 2.0"),
         ffmpeg: script(dir, "ffmpeg", ffmpeg_body),
         ffprobe: script(dir, "ffprobe", "echo 2.0"),
     }

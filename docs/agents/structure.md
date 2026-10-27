@@ -61,7 +61,7 @@ src-tauri/
     │                         # tools: mod.rs · commands.rs (in-memory state, no tables)
     └── shared/               # db.rs, error.rs, migrations/000N_*.sql
 
-scripts/                      # fetch-ffmpeg.sh + ffmpeg.lock, build-cli.sh, release-macos.sh + load-updater-key-macos.sh, latest-json.mjs (+ test)
+scripts/                      # build-cli.sh, release-macos.sh + load-updater-key-macos.sh, latest-json.mjs (+ test)
 ```
 
 Frontend `updater` and `cli` domains have no Rust `domain/` twin: their Rust halves are `app/updater.rs` and `app/cli_install.rs`, because they are OS integration rather than business data.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import ProgressRing from '@/shared/components/ProgressRing';
 import ErrorAlert from '@/shared/components/error/ErrorAlert';
 import useI18n from '@/shared/hooks/useI18n';
 import { useStore } from '@/shared/store/rootStore';
@@ -33,8 +34,10 @@ function ToastCard({ toast, onDismiss }: Readonly<ToastCardProps>) {
       })}
       onClick={clickToClose ? () => onDismiss(toast.id) : undefined}
     >
-      <div className="flex items-start gap-2">
-        {toast.kind === 'progress' ? (
+      <div className={cx('flex gap-2', toast.progress == null ? 'items-start' : 'items-center')}>
+        {toast.kind === 'progress' && toast.progress != null ? (
+          <ProgressRing ratio={toast.progress} label={toast.text} />
+        ) : toast.kind === 'progress' ? (
           <span className="loading loading-spinner loading-xs text-primary mt-0.5 shrink-0" />
         ) : (
           <span
@@ -63,14 +66,6 @@ function ToastCard({ toast, onDismiss }: Readonly<ToastCardProps>) {
           </>
         )}
       </div>
-      {toast.kind === 'progress' && (
-        <progress
-          className="progress progress-primary bg-track mt-2 h-1 w-full"
-          aria-label={toast.text}
-          value={toast.progress == null ? undefined : toast.progress * 100}
-          max={100}
-        />
-      )}
     </div>
   );
 }

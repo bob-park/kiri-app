@@ -11,15 +11,16 @@ import { useCompletedClear, useJobs, useUrlAdd } from '@/domain/queue/queries/qu
 import { openSettings } from '@/domain/settings/apis/settings';
 import type { Settings } from '@/domain/settings/apis/settings.dto';
 import { SETTINGS_QUERY_KEY, useSettings } from '@/domain/settings/queries/settings';
+import { checkYtdlpUpdate } from '@/domain/tools/apis/tools';
 import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
-import { TOOLS_QUERY_KEY, useToolsStatus, useToolsUpdate } from '@/domain/tools/queries/tools';
+import { TOOLS_QUERY_KEY, useToolsInstall, useToolsStatus, useToolsUpdate } from '@/domain/tools/queries/tools';
 import type { AppError } from '@/shared/api/common.dto';
 import Icon from '@/shared/components/Icon';
 import StatusBar from '@/shared/components/StatusBar';
 import useI18n from '@/shared/hooks/useI18n';
 import { useStore } from '@/shared/store/rootStore';
 import { extractUrl, isEditableTarget } from '@/utils/paste';
-import { toolsToast } from '@/utils/tools';
+import { downloadProgress, newlyFailedYoutube, toolsToast, updateOutcome } from '@/utils/tools';
 
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -39,6 +40,14 @@ export default function App() {
   const sheetUrl = useRef<string | null>(null);
   // A second paste before the first (readText · addUrl) finished is dropped (no duplicate jobs).
   const inFlight = useRef(false);
+  // The yt-dlp version already hinted this session (once per latest version).
+  const hinted = useRef<string | null>(null);
+  // Each job's last seen state kind, to spot a youtube job failing now (not one restored failed).
+  const seen = useRef<ReadonlyMap<number, string>>(new Map());
+  // The first render's keydown closure reaches `maybeHintYtdlp`; it reads the current language here.
+  const latestT = useRef<typeof t | null>(null);
+  // The hint's Update is running: its toast follows the yt-dlp download progress.
+  const hintUpdating = useRef(false);
 
   // state
   const [sheet, setSheet] = useState<SheetState | null>(null);
@@ -57,14 +66,19 @@ export default function App() {
   const { settings } = useSettings();
   const { jobs } = useJobs();
   const { status: tools } = useToolsStatus();
+  const { installTools } = useToolsInstall();
   const { updateTools } = useToolsUpdate();
   const { addUrl } = useUrlAdd();
   const { clearCompleted } = useCompletedClear();
 
   sheetUrl.current = sheet?.url ?? null;
+  latestT.current = t;
   const toolsState = toolsToast(tools);
   const toolsError = tools?.error ?? '';
   const toolsInstalling = tools?.installing ?? '';
+  const download = downloadProgress(tools?.progress ?? null);
+  const downloadRatio = download?.ratio ?? null;
+  const downloadSize = download?.size ?? '';
 
   // useEffect
   // While a missing tool downloads (e.g. first launch), a sticky toast names it.
@@ -77,19 +91,42 @@ export default function App() {
         kind: 'error',
         sticky: true,
         text: t.app.toolsFailed(toolsError),
-        action: { label: t.app.retry, run: () => updateTools() },
+        action: { label: t.app.retry, run: () => installTools() },
       });
     } else {
       pushToast({
         key: 'tools',
         kind: 'progress',
         sticky: true,
-        progress: null,
+        progress: downloadRatio,
         text: t.app.toolsInstalling(toolsInstalling),
-        desc: t.app.toolsPreparingDesc,
+        desc: downloadSize || t.app.toolsPreparingDesc,
       });
     }
-  }, [toolsState, toolsError, toolsInstalling, t]);
+  }, [toolsState, toolsError, toolsInstalling, downloadRatio, downloadSize, t]);
+
+  // While the hint's Update downloads yt-dlp, its toast shows the progress.
+  useEffect(() => {
+    if (hintUpdating.current && toolsInstalling === 'yt-dlp') {
+      pushToast({
+        key: 'ytdlp-hint',
+        kind: 'progress',
+        sticky: true,
+        progress: downloadRatio,
+        text: t.app.toolsInstalling('yt-dlp'),
+        desc: downloadSize || undefined,
+      });
+    }
+  }, [toolsInstalling, downloadRatio, downloadSize, t]);
+
+  // A youtube job failing now may be fixed by a newer yt-dlp.
+  useEffect(() => {
+    const r = newlyFailedYoutube(seen.current, jobs);
+    seen.current = r.seen;
+    if (r.failed) {
+      void maybeHintYtdlp();
+    }
+  }, [jobs]);
 
   // The handlers below only use refs, state setters and stable hook results, so the first render's are enough.
   useEffect(() => {
@@ -129,6 +166,9 @@ export default function App() {
       if (!url) {
         return showError({ code: 'INVALID_URL', message: '' });
       }
+      if (!navigator.onLine) {
+        return showError({ code: 'OFFLINE', message: '' });
+      }
       if (!queryClient.getQueryData<ToolsStatus>(TOOLS_QUERY_KEY)?.ready) {
         return showError({ code: 'YTDLP_MISSING', message: '' });
       }
@@ -155,8 +195,66 @@ export default function App() {
       setSheet((cur) => (cur?.url === url ? null : cur));
       if (current) {
         showError(e as AppError);
+        void maybeHintYtdlp();
       }
     }
+  };
+
+  // Uses only refs and stable store/mutation functions, so a first-render closure is safe.
+  const maybeHintYtdlp = async () => {
+    const version = await checkYtdlpUpdate().catch(() => null);
+    const tr = latestT.current;
+    if (!version || version === hinted.current || !tr) {
+      return;
+    }
+    pushToast({
+      key: 'ytdlp-hint',
+      kind: 'info',
+      text: tr.app.ytdlpHintTitle,
+      desc: tr.app.ytdlpHintDesc,
+      action: { label: tr.settings.update.update, run: handleHintUpdate },
+    });
+    hinted.current = version;
+  };
+
+  // The hint's Update: refused offline, else the hint becomes a progress toast, then the result.
+  // Like `maybeHintYtdlp`, it runs from a first-render closure, so it reads only refs and stable functions.
+  const handleHintUpdate = () => {
+    const tr = latestT.current;
+    if (!tr) {
+      return;
+    }
+    if (!navigator.onLine) {
+      return showError({ code: 'OFFLINE', message: '' });
+    }
+    pushToast({
+      key: 'ytdlp-hint',
+      kind: 'progress',
+      sticky: true,
+      progress: null,
+      text: tr.app.toolsInstalling('yt-dlp'),
+    });
+    hintUpdating.current = true;
+    updateTools(['yt-dlp'], {
+      onSettled: () => {
+        hintUpdating.current = false;
+      },
+      onSuccess: (status) => {
+        const cur = latestT.current ?? tr; // the language may have changed meanwhile
+        const outcome = updateOutcome(status);
+        if (outcome.kind === 'failed') {
+          pushToast({ key: 'ytdlp-hint', kind: 'error', text: cur.app.ytdlpUpdateFailed(outcome.error) });
+        } else {
+          pushToast({
+            key: 'ytdlp-hint',
+            kind: 'info',
+            text: outcome.kind === 'updated' ? cur.app.ytdlpUpdated : cur.app.toolsBusy,
+          });
+        }
+      },
+      // ErrorAlert shows the error.
+      onError: () => dismissToastByKey('ytdlp-hint'),
+    });
   };
 
   // ⌘V. Ignored while a sheet is open.

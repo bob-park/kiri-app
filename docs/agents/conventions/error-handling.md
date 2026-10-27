@@ -39,4 +39,5 @@ Engine codes (`EngineError::code()` uppercased in `engine_code`): `NOT_FOUND`, `
   1. `queryClient`'s `MutationCache.onError` (`RQProvider.tsx`) calls `useStore.getState().showError(err)` for every failed mutation, unless the mutation sets `meta: { silent: true }` and shows its own error.
   2. `<ErrorAlert />` (`src/shared/components/error/`) renders `errorMessage(err, t.errors)` (`src/utils/errorMessage.ts`) with a dismiss button. `Toasts` renders it at the end of the toast stack, so every window has it.
   3. Direct calls outside React Query (e.g. `openSettings()`) catch and pass the error to `showError` themselves.
+- **Frontend-only codes:** `OFFLINE` never comes from Rust; the UI raises it (`showError({ code: 'OFFLINE', message: '' })`) when a paste or the yt-dlp hint's Update runs offline. A refused paste also reuses the engine codes `INVALID_URL` and `YTDLP_MISSING` the same way, before any command runs. Each still needs its `t.errors` entry.
 - **Queries (reads)** are not routed to the banner. Use the query's `error` where a failed read matters.

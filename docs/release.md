@@ -22,7 +22,7 @@
    scripts/release-macos.sh
    ```
    스크립트가 하는 일:
-   - `yarn sidecars`(ffmpeg/ffprobe, kiri CLI)
+   - `yarn sidecars`(kiri CLI)
    - `yarn tauri build --bundles app,dmg`: Developer ID 서명, `.app` 공증(API 키), 업데이트 파일과 `.sig` 생성
    - `.dmg`를 `notarytool`로 공증하고 스테이플(Tauri는 `.app`만 공증한다)
    - 초안 릴리스 `v0.4.0`(`--target master`)을 만들고 아래 파일을 올린다.

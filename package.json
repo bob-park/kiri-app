@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "prettier": "prettier --write src",
-    "sidecars": "sh scripts/fetch-ffmpeg.sh && sh scripts/build-cli.sh"
+    "sidecars": "sh scripts/build-cli.sh"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.5",

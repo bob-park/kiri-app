@@ -22,7 +22,7 @@ related:
 | OS locale | `sys-locale` (native tray/menu labels) | `src-tauri/Cargo.toml` |
 | Engine | `tokio` (process, net, time), `reqwest` (rustls), `sha2` | `crates/kiri-core/Cargo.toml` |
 | CLI | `clap` 4 (derive) | `crates/kiri-cli/Cargo.toml` |
-| External tools | yt-dlp + Deno (downloaded at runtime into the app data dir); ffmpeg/ffprobe (bundled sidecars) | `crates/kiri-core/src/tools.rs`, `scripts/ffmpeg.lock` |
+| External tools | yt-dlp, FFmpeg (ffmpeg + ffprobe) and Deno, downloaded at runtime into the app data dir | `crates/kiri-core/src/tools.rs` |
 | UI | React 19, TypeScript 6, Vite 8 | `package.json` |
 | Styling | Tailwind CSS 4 (`@tailwindcss/vite`) + daisyUI 5, `classnames`, Pretendard (`pretendard` npm package) | `package.json` |
 | Server state | `@tanstack/react-query` 5 (+ devtools in dev) | `package.json` |

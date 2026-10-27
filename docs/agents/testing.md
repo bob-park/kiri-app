@@ -19,7 +19,7 @@ related:
 | `yarn typecheck` | types, including missing i18n keys | — |
 | `yarn lint` | ESLint + Prettier (`eslint src`) | — |
 
-Run node/yarn through mise (`mise exec -- yarn test`). `cargo test -p <crate>` (`kiri-core`, `kiri-cli`, `kiri-app`) runs one crate while iterating. The Rust tests need the sidecars in `src-tauri/binaries/` ([build-run](./build-run.md#setup)).
+Run node/yarn through mise (`mise exec -- yarn test`). `cargo test -p <crate>` (`kiri-core`, `kiri-cli`, `kiri-app`) runs one crate while iterating. The Rust tests need the `kiri-cli` sidecar in `src-tauri/binaries/` ([build-run](./build-run.md#setup)).
 
 ## What to test
 

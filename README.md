@@ -11,7 +11,7 @@ YouTube 링크를 붙여넣으면 원하는 화질과 자막을 골라 내려받
 2. dmg를 열고 kiri를 Applications 폴더로 옮깁니다.
 3. 실행합니다. Apple 공증을 받은 앱이라 경고 없이 열립니다.
 
-처음 실행하면 "다운로드 준비 중"이 잠시 표시됩니다. 다운로드에 필요한 구성 요소(yt-dlp, Deno)를 자동으로 받는 중입니다.
+처음 실행하면 "다운로드 준비 중"이 잠시 표시됩니다. 다운로드에 필요한 구성 요소(yt-dlp, FFmpeg, Deno)를 GitHub와 [ffmpeg.martin-riedl.de](https://ffmpeg.martin-riedl.de)에서 자동으로 받는 중입니다. 받은 파일은 SHA256으로 확인합니다.
 
 ## 사용법
 
@@ -57,7 +57,7 @@ H.264, HEVC, ProRes는 가능하면 Mac의 하드웨어 인코더(VideoToolbox)�
 | 일반 | 언어(시스템 / 한국어 / English), 테마(시스템 / 라이트 / 다크), 창을 닫으면 메뉴 막대로 숨기기 |
 | 다운로드 | 저장 위치, 기본 화질·포맷·자막, 옵션을 묻지 않고 바로 시작, 동시 다운로드 수, 하드웨어 가속 |
 | CLI | `kiri` 명령줄 도구 설치·제거 |
-| 업데이트 | 앱 버전과 업데이트 확인, 자동 확인, yt-dlp 버전과 지금 업데이트 |
+| 업데이트 | 앱 버전과 업데이트 확인, 자동 확인, 구성 요소(yt-dlp, FFmpeg, Deno) 버전과 업데이트 |
 
 ## 명령줄 도구 (CLI)
 
@@ -82,13 +82,13 @@ kiri list --json             # 다른 프로그램이 읽기 좋은 JSON 출력
 ## 업데이트
 
 - **앱:** 실행 후 10초 뒤, 그리고 하루에 한 번 새 버전을 확인합니다. 새 버전이 있으면 창 위쪽에 배너가 뜨고, 눌러서 설치하면 재시작됩니다. 다운로드 중이면 "큐가 끝나면 재시작"을 고를 수 있습니다.
-- **yt-dlp:** YouTube 변경에 대응하도록 하루에 한 번 최신 버전을 확인해 자동으로 바꿉니다.
+- **구성 요소(yt-dlp, FFmpeg, Deno):** 자동으로 바꾸지 않습니다. 설정 → 업데이트를 열면 최신 버전을 확인하고, 원하는 것만 업데이트할 수 있습니다. 확인할 때 GitHub와 ffmpeg.martin-riedl.de에 접속합니다.
 
 ## 데이터 위치
 
 | 내용 | 경로 |
 |---|---|
-| 설정, 큐, 구성 요소(yt-dlp, Deno) | `~/Library/Application Support/org.bobpark.kiri/` |
+| 설정, 큐, 구성 요소(yt-dlp, FFmpeg, Deno) | `~/Library/Application Support/org.bobpark.kiri/` |
 | 작업별 로그 | `~/Library/Logs/org.bobpark.kiri/jobs/` |
 | 받은 파일 (기본값) | `~/Movies/kiri/` |
 
