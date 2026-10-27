@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { getToolsStatus, updateTools } from '@/domain/tools/apis/tools';
-import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
+import { checkToolUpdates, getToolsStatus, installTools, updateTools } from '@/domain/tools/apis/tools';
+import type { ToolName, ToolsStatus } from '@/domain/tools/apis/tools.dto';
 import type { AppError } from '@/shared/api/common.dto';
 
 import { listen } from '@tauri-apps/api/event';
@@ -41,8 +41,31 @@ export function useToolsStatus() {
   return { status: data ?? null };
 }
 
-export function useToolsUpdate() {
+export function useToolsInstall() {
   const { mutate, isPending } = useMutation<void, AppError, void>({
+    mutationKey: ['tools', 'status', 'install'],
+    mutationFn: installTools,
+  });
+
+  return { installTools: mutate, isLoading: isPending };
+}
+
+/**
+ * Checks every tool for updates on mount, and again whenever an install ends: a check made
+ * during an install hits the busy guard and is dropped. A failed check is silent.
+ */
+export function useToolUpdateCheck(installing: ToolName | null | undefined) {
+  const busy = !!installing;
+
+  useEffect(() => {
+    if (!busy) {
+      checkToolUpdates().catch(() => {});
+    }
+  }, [busy]);
+}
+
+export function useToolsUpdate() {
+  const { mutate, isPending } = useMutation<void, AppError, ToolName[]>({
     mutationKey: ['tools', 'status', 'update'],
     mutationFn: updateTools,
   });

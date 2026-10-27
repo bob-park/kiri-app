@@ -3,12 +3,14 @@ import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { toolsToast } from './tools.ts';
+import { pendingUpdates, toolsToast } from './tools.ts';
 
 const st = (p: Partial<ToolsStatus>): ToolsStatus => ({
   ready: false,
   installing: null,
-  ytdlp_version: null,
+  ytdlp: { current: null, latest: null },
+  ffmpeg: { current: null, latest: null },
+  deno: { current: null, latest: null },
   error: null,
   last_check: null,
   ...p,
@@ -32,4 +34,15 @@ void test('toolsToast shows preparing only during a real download', () => {
 
 void test('toolsToast shows failed when an error remains and nothing is downloading', () => {
   assert.equal(toolsToast(st({ installing: null, error: 'x' })), 'failed');
+});
+
+void test('pendingUpdates lists tools with a different latest, in order', () => {
+  const s = st({
+    ytdlp: { current: 'a', latest: 'b' },
+    ffmpeg: { current: 'x', latest: 'x' },
+    deno: { current: 'd', latest: 'e' },
+  });
+  assert.deepEqual(pendingUpdates(s), ['yt-dlp', 'deno']);
+  assert.deepEqual(pendingUpdates(null), []);
+  assert.deepEqual(pendingUpdates(st({ ytdlp: { current: 'a', latest: null } })), []);
 });

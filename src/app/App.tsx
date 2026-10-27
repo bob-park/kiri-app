@@ -12,7 +12,7 @@ import { openSettings } from '@/domain/settings/apis/settings';
 import type { Settings } from '@/domain/settings/apis/settings.dto';
 import { SETTINGS_QUERY_KEY, useSettings } from '@/domain/settings/queries/settings';
 import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
-import { TOOLS_QUERY_KEY, useToolsStatus, useToolsUpdate } from '@/domain/tools/queries/tools';
+import { TOOLS_QUERY_KEY, useToolsInstall, useToolsStatus } from '@/domain/tools/queries/tools';
 import type { AppError } from '@/shared/api/common.dto';
 import Icon from '@/shared/components/Icon';
 import StatusBar from '@/shared/components/StatusBar';
@@ -57,7 +57,7 @@ export default function App() {
   const { settings } = useSettings();
   const { jobs } = useJobs();
   const { status: tools } = useToolsStatus();
-  const { updateTools } = useToolsUpdate();
+  const { installTools } = useToolsInstall();
   const { addUrl } = useUrlAdd();
   const { clearCompleted } = useCompletedClear();
 
@@ -77,7 +77,7 @@ export default function App() {
         kind: 'error',
         sticky: true,
         text: t.app.toolsFailed(toolsError),
-        action: { label: t.app.retry, run: () => updateTools() },
+        action: { label: t.app.retry, run: () => installTools() },
       });
     } else {
       pushToast({

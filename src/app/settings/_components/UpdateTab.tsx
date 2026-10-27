@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 
+import ToolsSection from '@/app/settings/_components/ToolsSection';
 import type { Job } from '@/domain/queue/apis/queue.dto';
 import { useSettings, useSettingsPatch } from '@/domain/settings/queries/settings';
 import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
-import { useToolsUpdate } from '@/domain/tools/queries/tools';
 import { useUpdateCheck, useUpdateDownloadRetry, useUpdateInstall } from '@/domain/updater/queries/updater';
 import Button from '@/shared/components/settings/Button';
 import SettingRow from '@/shared/components/settings/SettingRow';
@@ -32,7 +32,6 @@ export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabPro
   // queries
   const { settings } = useSettings();
   const { patchSettings } = useSettingsPatch();
-  const { updateTools, isLoading: toolsUpdating } = useToolsUpdate();
   const { checkUpdate, isLoading: checking } = useUpdateCheck();
   const { installUpdate } = useUpdateInstall();
   const { retryUpdateDownload } = useUpdateDownloadRetry();
@@ -63,8 +62,6 @@ export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabPro
         return t.update.installing;
     }
   })();
-  const toolsBusy = toolsUpdating || !!tools?.installing;
-  const lastCheck = tools?.last_check ? new Date(tools.last_check).toLocaleString() : t.settings.update.never;
 
   return (
     <>
@@ -92,18 +89,7 @@ export default function UpdateTab({ jobs, tools, update }: Readonly<UpdateTabPro
           )}
         </SettingRow>
       </SettingSection>
-      <SettingSection title="yt-dlp">
-        <SettingRow
-          label={
-            tools?.ytdlp_version ? t.settings.update.ytdlpVersion(tools.ytdlp_version) : t.settings.update.ytdlpMissing
-          }
-          desc={t.settings.update.lastCheck(lastCheck)}
-        >
-          <Button aria-label={t.settings.update.ytdlpUpdate} disabled={toolsBusy} onClick={() => updateTools()}>
-            {toolsBusy ? <span className="loading loading-spinner loading-xs" /> : t.settings.update.ytdlpUpdate}
-          </Button>
-        </SettingRow>
-      </SettingSection>
+      <ToolsSection tools={tools} />
       {tools?.error && !tools.installing && (
         <div role="alert" className="alert alert-error mt-2 py-2 text-sm">
           {tools.error}
