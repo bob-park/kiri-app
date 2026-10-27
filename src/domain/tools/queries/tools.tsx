@@ -57,11 +57,20 @@ export function useToolsInstall() {
 export function useToolUpdateCheck(installing: ToolName | null | undefined) {
   const busy = !!installing;
 
+  const { mutate, isPending } = useMutation<void, AppError, void>({
+    mutationKey: ['tools', 'status', 'check'],
+    mutationFn: checkToolUpdates,
+    meta: { silent: true },
+  });
+
   useEffect(() => {
     if (!busy) {
-      checkToolUpdates().catch(() => {});
+      mutate();
     }
-  }, [busy]);
+  }, [busy, mutate]);
+
+  // The check holds the busy guard, so an update started meanwhile would be dropped.
+  return { checking: isPending };
 }
 
 export function useToolsUpdate() {

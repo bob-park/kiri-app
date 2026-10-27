@@ -3,7 +3,7 @@ import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { pendingUpdates, toolsToast } from './tools.ts';
+import { pendingUpdates, toolState, toolsSummary, toolsToast } from './tools.ts';
 
 const st = (p: Partial<ToolsStatus>): ToolsStatus => ({
   ready: false,
@@ -45,4 +45,19 @@ void test('pendingUpdates lists tools with a different latest, in order', () => 
   assert.deepEqual(pendingUpdates(s), ['yt-dlp', 'deno']);
   assert.deepEqual(pendingUpdates(null), []);
   assert.deepEqual(pendingUpdates(st({ ytdlp: { current: 'a', latest: null } })), []);
+});
+
+void test('toolState: update, latest, unknown (latest null) or missing', () => {
+  assert.equal(toolState({ current: 'a', latest: 'b' }), 'update');
+  assert.equal(toolState({ current: null, latest: 'b' }), 'update');
+  assert.equal(toolState({ current: 'a', latest: 'a' }), 'latest');
+  assert.equal(toolState({ current: 'a', latest: null }), 'unknown');
+  assert.equal(toolState({ current: null, latest: null }), 'missing');
+});
+
+void test('toolsSummary claims up to date only when some latest is known', () => {
+  assert.equal(toolsSummary(null), 'unknown');
+  assert.equal(toolsSummary(st({ ytdlp: { current: 'a', latest: null } })), 'unknown');
+  assert.equal(toolsSummary(st({ ytdlp: { current: 'a', latest: 'a' } })), 'upToDate');
+  assert.equal(toolsSummary(st({ deno: { current: 'a', latest: 'b' } })), 'updates');
 });
