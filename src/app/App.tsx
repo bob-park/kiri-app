@@ -20,7 +20,7 @@ import StatusBar from '@/shared/components/StatusBar';
 import useI18n from '@/shared/hooks/useI18n';
 import { useStore } from '@/shared/store/rootStore';
 import { extractUrl, isEditableTarget } from '@/utils/paste';
-import { newlyFailedYoutube, toolsToast, updateOutcome } from '@/utils/tools';
+import { downloadProgress, newlyFailedYoutube, toolsToast, updateOutcome } from '@/utils/tools';
 
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -46,6 +46,8 @@ export default function App() {
   const seen = useRef<ReadonlyMap<number, string>>(new Map());
   // The first render's keydown closure reaches `maybeHintYtdlp`; it reads the current language here.
   const latestT = useRef<typeof t | null>(null);
+  // The hint's Update is running: its toast follows the yt-dlp download progress.
+  const hintUpdating = useRef(false);
 
   // state
   const [sheet, setSheet] = useState<SheetState | null>(null);
@@ -74,6 +76,9 @@ export default function App() {
   const toolsState = toolsToast(tools);
   const toolsError = tools?.error ?? '';
   const toolsInstalling = tools?.installing ?? '';
+  const download = downloadProgress(tools?.progress ?? null);
+  const downloadRatio = download?.ratio ?? null;
+  const downloadSize = download?.size ?? '';
 
   // useEffect
   // While a missing tool downloads (e.g. first launch), a sticky toast names it.
@@ -93,12 +98,26 @@ export default function App() {
         key: 'tools',
         kind: 'progress',
         sticky: true,
-        progress: null,
+        progress: downloadRatio,
         text: t.app.toolsInstalling(toolsInstalling),
-        desc: t.app.toolsPreparingDesc,
+        desc: downloadSize || t.app.toolsPreparingDesc,
       });
     }
-  }, [toolsState, toolsError, toolsInstalling, t]);
+  }, [toolsState, toolsError, toolsInstalling, downloadRatio, downloadSize, t]);
+
+  // While the hint's Update downloads yt-dlp, its toast shows the progress.
+  useEffect(() => {
+    if (hintUpdating.current && toolsInstalling === 'yt-dlp') {
+      pushToast({
+        key: 'ytdlp-hint',
+        kind: 'progress',
+        sticky: true,
+        progress: downloadRatio,
+        text: t.app.toolsInstalling('yt-dlp'),
+        desc: downloadSize || undefined,
+      });
+    }
+  }, [toolsInstalling, downloadRatio, downloadSize, t]);
 
   // A youtube job failing now may be fixed by a newer yt-dlp.
   useEffect(() => {
@@ -215,7 +234,11 @@ export default function App() {
       progress: null,
       text: tr.app.toolsInstalling('yt-dlp'),
     });
+    hintUpdating.current = true;
     updateTools(['yt-dlp'], {
+      onSettled: () => {
+        hintUpdating.current = false;
+      },
       onSuccess: (status) => {
         const cur = latestT.current ?? tr; // the language may have changed meanwhile
         const outcome = updateOutcome(status);

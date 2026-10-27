@@ -71,6 +71,61 @@ async fn fetch(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("{url}: {e}"))
 }
 
+/// Bytes received so far for one install, and the total when every server reported a size.
+#[derive(Serialize, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Progress {
+    pub done: u64,
+    pub total: Option<u64>,
+}
+
+/// Downloads `urls` one after another, reporting the bytes received across all of them.
+/// The total comes from a HEAD per url, so a multi-file install (ffmpeg + ffprobe) shows
+/// one steady bar; without it the GET's length stands in for a single file.
+async fn fetch_all(
+    client: &reqwest::Client,
+    urls: &[&str],
+    on_progress: &mut impl FnMut(Progress),
+) -> Result<Vec<Vec<u8>>, String> {
+    let mut lengths = Vec::with_capacity(urls.len());
+    for url in urls {
+        let len = match client.head(*url).send().await {
+            // `content_length()` is the body's size, always 0 for HEAD: read the header.
+            Ok(r) if r.status().is_success() => r
+                .headers()
+                .get(reqwest::header::CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok()?.parse().ok())
+                .filter(|&n: &u64| n > 0),
+            _ => None,
+        };
+        lengths.push(len);
+    }
+    let mut p = Progress {
+        done: 0,
+        total: lengths.into_iter().sum(),
+    };
+    let mut out = Vec::with_capacity(urls.len());
+    for url in urls {
+        let mut resp = client
+            .get(*url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| format!("{url}: {e}"))?;
+        if p.total.is_none() && urls.len() == 1 {
+            p.total = resp.content_length();
+        }
+        on_progress(p);
+        let mut buf = Vec::with_capacity(resp.content_length().unwrap_or(0) as usize);
+        while let Some(chunk) = resp.chunk().await.map_err(|e| format!("{url}: {e}"))? {
+            buf.extend_from_slice(&chunk);
+            p.done += chunk.len() as u64;
+            on_progress(p);
+        }
+        out.push(buf);
+    }
+    Ok(out)
+}
+
 async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, String> {
     String::from_utf8(fetch(client, url).await?).map_err(|e| format!("{url}: {e}"))
 }
@@ -312,17 +367,17 @@ pub async fn install(
     tool: ToolName,
     release: &Release,
     paths: &Tools,
+    mut on_progress: impl FnMut(Progress),
 ) -> Result<(), String> {
     if !release.valid() {
         return Err(format!("{}: invalid release", tool_label(tool)));
     }
-    let mut blobs = Vec::with_capacity(release.assets.len());
-    for a in &release.assets {
-        let bytes = fetch(client, &a.url).await?;
-        if sha256_hex(&bytes) != a.sha256 {
+    let urls: Vec<&str> = release.assets.iter().map(|a| a.url.as_str()).collect();
+    let blobs = fetch_all(client, &urls, &mut on_progress).await?;
+    for (bytes, a) in blobs.iter().zip(&release.assets) {
+        if sha256_hex(bytes) != a.sha256 {
             return Err(format!("{} checksum mismatch", tool_label(tool)));
         }
-        blobs.push(bytes);
     }
     let targets: &[(&str, &Path)] = match tool {
         ToolName::Ytdlp => {
@@ -469,7 +524,13 @@ mod tests {
         for tool in ALL_TOOLS {
             let release = latest(&client, tool).await.unwrap();
             println!("{tool:?}: {release:?}");
-            install(&client, tool, &release, &paths).await.unwrap();
+            let mut last = Progress::default();
+            install(&client, tool, &release, &paths, |p| last = p)
+                .await
+                .unwrap();
+            println!("{tool:?}: {last:?}");
+            assert!(last.done > 0);
+            assert_eq!(last.total, Some(last.done), "total known and reached");
             assert!(is_installed(tool, &paths));
             assert_eq!(
                 installed_version(tool, &paths).await.as_deref(),

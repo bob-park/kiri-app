@@ -1,7 +1,7 @@
 //! Tauri adapters for the tools domain: the commands, the `tools://changed` event and the
 //! startup install. Every install and check goes through `ToolsState::try_busy`.
 
-use super::{ToolsState, ToolsStatus, all_installed, check_due};
+use super::{ToolsState, ToolsStatus, all_installed, check_due, progress_due};
 use crate::{domain::settings, shared::error::AppResult};
 use kiri_core::{
     engine::{Engine, now_ms},
@@ -128,15 +128,24 @@ async fn install_all(app: &AppHandle, paths: &Tools, names: &[ToolName]) {
     for &tool in names {
         update(app, |s| {
             s.installing = Some(tool);
+            s.progress = None;
             s.error = None;
         });
+        let mut last_emit = None;
+        let on_progress = |p| {
+            let now = now_ms();
+            if progress_due(last_emit, now, p) {
+                last_emit = Some(now);
+                update(app, |s| s.progress = Some(p));
+            }
+        };
         let stored = state.releases.lock().unwrap().get(&tool).cloned();
         let result = async {
             let release = match stored {
                 Some(r) => r,
                 None => tools::latest(&client, tool).await?,
             };
-            tools::install(&client, tool, &release, paths).await?;
+            tools::install(&client, tool, &release, paths, on_progress).await?;
             Ok::<_, String>(release)
         }
         .await;
@@ -159,6 +168,7 @@ async fn install_all(app: &AppHandle, paths: &Tools, names: &[ToolName]) {
         }
         s.ready = ready;
         s.installing = None;
+        s.progress = None;
         s.error = error;
     });
     app.state::<Engine>().start(); // runs queued jobs held while a tool was missing

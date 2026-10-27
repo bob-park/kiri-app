@@ -5,7 +5,7 @@ pub mod commands;
 
 use kiri_core::{
     model::Tools,
-    tools::{self, ALL_TOOLS, Release, ToolName},
+    tools::{self, ALL_TOOLS, Progress, Release, ToolName},
 };
 use serde::Serialize;
 use std::{
@@ -17,6 +17,8 @@ use std::{
 };
 
 const HOUR_MS: u64 = 60 * 60 * 1000;
+/// Download progress events go out at most this often (plus the final byte).
+const PROGRESS_EVERY_MS: u64 = 100;
 
 #[derive(Serialize, Clone, Default, Debug, PartialEq)]
 pub struct ToolInfo {
@@ -38,6 +40,8 @@ pub struct ToolsStatus {
     pub ready: bool,
     /// The tool being downloaded.
     pub installing: Option<ToolName>,
+    /// Bytes of `installing` received so far; `None` when nothing downloads.
+    pub progress: Option<Progress>,
     pub ytdlp: ToolInfo,
     pub ffmpeg: ToolInfo,
     pub deno: ToolInfo,
@@ -120,6 +124,12 @@ pub fn check_due(checked_at: Option<u64>, now: u64) -> bool {
     checked_at.is_none_or(|c| now.saturating_sub(c) >= HOUR_MS)
 }
 
+/// Whether a download progress update is worth an event: the first one, the last byte,
+/// or `PROGRESS_EVERY_MS` since the last event.
+pub fn progress_due(last_ms: Option<u64>, now: u64, p: Progress) -> bool {
+    last_ms.is_none_or(|l| now.saturating_sub(l) >= PROGRESS_EVERY_MS) || p.total == Some(p.done)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +141,16 @@ mod tests {
         assert!(check_due(None, 0));
         assert!(!check_due(Some(1_000), 1_000 + 59 * MIN));
         assert!(check_due(Some(1_000), 1_000 + 60 * MIN));
+    }
+
+    #[test]
+    fn progress_due_throttles_but_keeps_the_last_byte() {
+        let p = |done, total| Progress { done, total };
+        assert!(progress_due(None, 0, p(0, Some(10))));
+        assert!(!progress_due(Some(1_000), 1_099, p(5, Some(10))));
+        assert!(progress_due(Some(1_000), 1_100, p(5, Some(10))));
+        assert!(progress_due(Some(1_000), 1_001, p(10, Some(10))));
+        assert!(!progress_due(Some(1_000), 1_001, p(10, None)));
     }
 
     #[test]
@@ -177,6 +197,7 @@ mod tests {
             serde_json::json!({
                 "ready": false,
                 "installing": null,
+                "progress": null,
                 "ytdlp": info,
                 "ffmpeg": info,
                 "deno": info,

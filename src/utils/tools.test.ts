@@ -4,11 +4,20 @@ import type { ToolsStatus } from '@/domain/tools/apis/tools.dto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { newlyFailedYoutube, pendingUpdates, toolState, toolsSummary, toolsToast, updateOutcome } from './tools.ts';
+import {
+  downloadProgress,
+  newlyFailedYoutube,
+  pendingUpdates,
+  toolState,
+  toolsSummary,
+  toolsToast,
+  updateOutcome,
+} from './tools.ts';
 
 const st = (p: Partial<ToolsStatus>): ToolsStatus => ({
   ready: false,
   installing: null,
+  progress: null,
   ytdlp: { current: null, latest: null },
   ffmpeg: { current: null, latest: null },
   deno: { current: null, latest: null },
@@ -91,4 +100,14 @@ void test('updateOutcome: busy when nothing ran, failed with the install error, 
   assert.deepEqual(updateOutcome(null), { kind: 'busy' });
   assert.deepEqual(updateOutcome(st({ ready: true, error: 'net down' })), { kind: 'failed', error: 'net down' });
   assert.deepEqual(updateOutcome(st({ ready: true })), { kind: 'updated' });
+});
+
+void test('downloadProgress shows both sizes with units, or just the bytes when the total is unknown', () => {
+  assert.equal(downloadProgress(null), null);
+  assert.deepEqual(downloadProgress({ done: 12_582_912, total: 29_779_558 }), {
+    ratio: 12_582_912 / 29_779_558,
+    size: '12.0 MB / 28.4 MB',
+  });
+  assert.deepEqual(downloadProgress({ done: 0, total: 1024 }), { ratio: 0, size: '0 B / 1.0 KB' });
+  assert.deepEqual(downloadProgress({ done: 2048, total: null }), { ratio: null, size: '2.0 KB' });
 });

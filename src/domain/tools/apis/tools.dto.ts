@@ -9,11 +9,20 @@ export interface ToolInfo {
   latest: string | null;
 }
 
+/** Mirrors `kiri_core::tools::Progress`: bytes received for the tool being installed. */
+export interface ToolProgress {
+  done: number;
+  /** `null` when a server did not report a size. */
+  total: number | null;
+}
+
 /** Mirrors `src-tauri/src/domain/tools/mod.rs` `ToolsStatus`. */
 export type ToolsStatus = {
   ready: boolean;
   /** The tool being downloaded right now. */
   installing: ToolName | null;
+  /** Download progress of `installing`; `null` when nothing downloads. */
+  progress: ToolProgress | null;
   ytdlp: ToolInfo;
   ffmpeg: ToolInfo;
   deno: ToolInfo;

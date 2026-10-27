@@ -1,6 +1,8 @@
 // Type-only imports: erased at runtime, so node --test needs no alias resolution.
 import type { Job } from '@/domain/queue/apis/queue.dto';
-import type { ToolInfo, ToolName, ToolsStatus } from '@/domain/tools/apis/tools.dto';
+import type { ToolInfo, ToolName, ToolProgress, ToolsStatus } from '@/domain/tools/apis/tools.dto';
+
+import { formatBytes } from './format.ts';
 
 export type ToolsToast = 'hidden' | 'preparing' | 'failed';
 
@@ -74,4 +76,18 @@ export function updateOutcome(s: ToolsStatus | null): UpdateOutcome {
   }
 
   return s.error ? { kind: 'failed', error: s.error } : { kind: 'updated' };
+}
+
+/** The progress ring's fill (0..1, or `null` while the size is unknown) and its size text, e.g. "12.0 MB / 28.4 MB". */
+export function downloadProgress(p: ToolProgress | null): { ratio: number | null; size: string } | null {
+  if (!p) {
+    return null;
+  }
+
+  const done = formatBytes(p.done) || '0 B';
+  if (!p.total) {
+    return { ratio: null, size: done };
+  }
+
+  return { ratio: Math.min(p.done / p.total, 1), size: `${done} / ${formatBytes(p.total)}` };
 }

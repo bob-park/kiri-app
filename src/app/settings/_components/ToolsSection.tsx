@@ -1,11 +1,12 @@
 import type { ToolName, ToolsStatus } from '@/domain/tools/apis/tools.dto';
 import { useToolUpdateCheck, useToolsUpdate } from '@/domain/tools/queries/tools';
+import ProgressRing from '@/shared/components/ProgressRing';
 import Button from '@/shared/components/settings/Button';
 import SettingRow from '@/shared/components/settings/SettingRow';
 import SettingSection from '@/shared/components/settings/SettingSection';
 import useI18n from '@/shared/hooks/useI18n';
 import useOnline from '@/shared/hooks/useOnline';
-import { TOOL_ORDER, pendingUpdates, toolInfo, toolState, toolsSummary } from '@/utils/tools';
+import { TOOL_ORDER, downloadProgress, pendingUpdates, toolInfo, toolState, toolsSummary } from '@/utils/tools';
 
 const LABEL_KEY = { 'yt-dlp': 'ytdlp', ffmpeg: 'ffmpeg', deno: 'deno' } as const satisfies Record<ToolName, string>;
 
@@ -44,7 +45,9 @@ export default function ToolsSection({ tools }: Readonly<ToolsSectionProps>) {
       {TOOL_ORDER.map((name) => {
         const info = tools ? toolInfo(tools, name) : { current: null, latest: null };
         const state = toolState(info);
-        const desc = {
+        const installing = tools?.installing === name;
+        const download = installing ? downloadProgress(tools.progress) : null;
+        const versionDesc = {
           update:
             info.current && info.latest
               ? t.settings.update.versionArrow(info.current, info.latest)
@@ -53,22 +56,30 @@ export default function ToolsSection({ tools }: Readonly<ToolsSectionProps>) {
           unknown: info.current ?? '',
           missing: t.settings.update.notInstalled,
         }[state];
-        const spinner = (
-          <span role="status" aria-label={t.settings.update.updating} className="loading loading-spinner loading-xs" />
-        );
+        const desc = download?.size || versionDesc;
+        const progress =
+          download?.ratio != null ? (
+            <ProgressRing ratio={download.ratio} label={t.settings.update.updating} />
+          ) : (
+            <span
+              role="status"
+              aria-label={t.settings.update.updating}
+              className="loading loading-spinner loading-xs"
+            />
+          );
 
         return (
           <SettingRow key={name} label={t.settings.update.toolLabel[LABEL_KEY[name]]} desc={desc}>
             {(labelId) => {
+              if (installing) {
+                return progress;
+              }
               if (state === 'update') {
                 return (
                   <Button aria-describedby={labelId} disabled={disabled} onClick={() => updateTools([name])}>
-                    {tools?.installing === name ? spinner : t.settings.update.update}
+                    {t.settings.update.update}
                   </Button>
                 );
-              }
-              if (tools?.installing === name) {
-                return spinner;
               }
 
               return (
