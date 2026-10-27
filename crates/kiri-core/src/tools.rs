@@ -1,6 +1,7 @@
-//! Downloads yt-dlp and Deno from GitHub Releases, verifies SHA256 and installs them.
+//! Downloads yt-dlp and Deno from GitHub Releases and FFmpeg (ffmpeg + ffprobe) from
+//! ffmpeg.martin-riedl.de, verifies SHA256 and installs them.
 //! Files fetched with reqwest carry no quarantine attribute, so Gatekeeper does not block them.
-use crate::runner;
+use crate::{model::Tools, runner};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs, io, os::unix::fs::PermissionsExt, path::Path, time::Duration};
@@ -261,6 +262,177 @@ async fn unpack_staged(zip: &[u8], bin: &str, dest: &Path, staging: &Path) -> Re
     fs::rename(&staged, dest).map_err(|e| e.to_string())
 }
 
+const YTDLP_LATEST: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest";
+const DENO_LATEST: &str = "https://github.com/denoland/deno/releases/latest";
+const FFMPEG_LATEST: &str = "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release";
+
+/// Like `http_client()`, but never follows redirects, so `latest` can read `Location`.
+pub fn redirect_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent(concat!("kiri/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
+        .https_only(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("static client config")
+}
+
+/// The absolute `Location` of a 3xx GET (HEAD 404s on martin-riedl.de); the body is never read.
+async fn location(client: &reqwest::Client, url: &str) -> Result<String, String> {
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("{url}: {e}"))?;
+    if !resp.status().is_redirection() {
+        return Err(format!("{url}: expected a redirect, got {}", resp.status()));
+    }
+    let loc = resp
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| format!("{url}: no Location header"))?;
+    // martin-riedl.de answers with a relative path
+    resp.url()
+        .join(loc)
+        .map(String::from)
+        .map_err(|e| format!("{url}: bad Location {loc}: {e}"))
+}
+
+/// The version a GitHub `releases/latest` redirect points at.
+async fn github_latest(redirects: &reqwest::Client, url: &str) -> Result<String, String> {
+    let loc = location(redirects, url).await?;
+    parse_tag(&loc).ok_or_else(|| format!("unexpected release tag: {loc}"))
+}
+
+/// One asset whose hash comes from `sums_url`, looked up under `file`.
+async fn asset(
+    client: &reqwest::Client,
+    url: String,
+    sums_url: &str,
+    file: &str,
+) -> Result<Asset, String> {
+    let sums = fetch_text(client, sums_url).await?;
+    let sha256 = find_hash(&sums, file).ok_or_else(|| format!("{file} checksum not found"))?;
+    Ok(Asset { url, sha256 })
+}
+
+/// The latest stable release of `tool`, pinned to versioned download urls.
+pub async fn latest(client: &reqwest::Client, tool: ToolName) -> Result<Release, String> {
+    let redirects = redirect_client();
+    let release = match tool {
+        ToolName::Ytdlp => {
+            let version = github_latest(&redirects, YTDLP_LATEST).await?;
+            let base = format!("https://github.com/yt-dlp/yt-dlp/releases/download/{version}");
+            let a = asset(
+                client,
+                format!("{base}/{YTDLP_ASSET}"),
+                &format!("{base}/SHA2-256SUMS"),
+                YTDLP_ASSET,
+            )
+            .await?;
+            Release {
+                version,
+                assets: vec![a],
+            }
+        }
+        ToolName::Deno => {
+            let version = github_latest(&redirects, DENO_LATEST).await?;
+            let url = format!(
+                "https://github.com/denoland/deno/releases/download/v{version}/{DENO_ASSET}"
+            );
+            let a = asset(client, url.clone(), &format!("{url}.sha256sum"), DENO_ASSET).await?;
+            Release {
+                version,
+                assets: vec![a],
+            }
+        }
+        ToolName::Ffmpeg => {
+            let mut assets = Vec::with_capacity(2);
+            for name in ["ffmpeg", "ffprobe"] {
+                let file = format!("{name}.zip");
+                let url = location(&redirects, &format!("{FFMPEG_LATEST}/{file}")).await?;
+                let sums_url = format!("{url}.sha256");
+                assets.push(asset(client, url, &sums_url, &file).await?);
+            }
+            let ffprobe = assets.pop().expect("two assets");
+            let ffmpeg = assets.pop().expect("two assets");
+            ffmpeg_release(ffmpeg, ffprobe)
+                .ok_or("ffmpeg and ffprobe versions differ".to_string())?
+        }
+    };
+    if !release.valid() {
+        return Err(format!("{}: invalid release {release:?}", tool_label(tool)));
+    }
+    Ok(release)
+}
+
+fn tool_label(tool: ToolName) -> &'static str {
+    match tool {
+        ToolName::Ytdlp => "yt-dlp",
+        ToolName::Ffmpeg => "ffmpeg",
+        ToolName::Deno => "deno",
+    }
+}
+
+/// Downloads and verifies every asset first, then installs, so a failed download changes nothing.
+pub async fn install(
+    client: &reqwest::Client,
+    tool: ToolName,
+    release: &Release,
+    paths: &Tools,
+) -> Result<(), String> {
+    if !release.valid() {
+        return Err(format!("{}: invalid release", tool_label(tool)));
+    }
+    let mut blobs = Vec::with_capacity(release.assets.len());
+    for a in &release.assets {
+        let bytes = fetch(client, &a.url).await?;
+        if sha256_hex(&bytes) != a.sha256 {
+            return Err(format!("{} checksum mismatch", tool_label(tool)));
+        }
+        blobs.push(bytes);
+    }
+    let targets: &[(&str, &Path)] = match tool {
+        ToolName::Ytdlp => {
+            return install_executable(&paths.ytdlp, &blobs[0]).map_err(|e| e.to_string());
+        }
+        ToolName::Deno => &[("deno", &paths.deno)],
+        // ffmpeg_release orders the assets ffmpeg, ffprobe
+        ToolName::Ffmpeg => &[("ffmpeg", &paths.ffmpeg), ("ffprobe", &paths.ffprobe)],
+    };
+    if blobs.len() != targets.len() {
+        return Err(format!("{}: unexpected asset count", tool_label(tool)));
+    }
+    for ((bin, dest), zip) in targets.iter().zip(&blobs) {
+        if let Some(dir) = dest.parent() {
+            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        unpack_zip(zip, bin, dest).await?;
+    }
+    Ok(())
+}
+
+pub fn is_installed(tool: ToolName, paths: &Tools) -> bool {
+    match tool {
+        ToolName::Ytdlp => paths.ytdlp.is_file(),
+        ToolName::Deno => paths.deno.is_file(),
+        ToolName::Ffmpeg => paths.ffmpeg.is_file() && paths.ffprobe.is_file(),
+    }
+}
+
+/// The installed version (ffmpeg's from `ffmpeg -version`), or `None` when missing or unreadable.
+pub async fn installed_version(tool: ToolName, paths: &Tools) -> Option<String> {
+    let (bin, flag) = match tool {
+        ToolName::Ytdlp => (&paths.ytdlp, "--version"),
+        ToolName::Deno => (&paths.deno, "--version"),
+        ToolName::Ffmpeg => (&paths.ffmpeg, "-version"),
+    };
+    let out = runner::output(bin, &[flag.to_string()]).await.ok()?;
+    parse_version(&out)
+}
+
 pub async fn version(bin: &Path) -> Option<String> {
     let out = runner::output(bin, &["--version".to_string()]).await.ok()?;
     out.lines()
@@ -333,6 +505,84 @@ mod tests {
         let bin = crate::testutil::script(d.path(), "yt-dlp", "echo 2026.09.30\necho extra");
         assert_eq!(version(&bin).await.as_deref(), Some("2026.09.30"));
         assert_eq!(version(&d.path().join("missing")).await, None);
+    }
+
+    fn tools_in(dir: &Path) -> Tools {
+        let bin = dir.join("bin");
+        Tools {
+            ytdlp: bin.join("yt-dlp"),
+            deno: bin.join("deno"),
+            ffmpeg: bin.join("ffmpeg"),
+            ffprobe: bin.join("ffprobe"),
+        }
+    }
+
+    #[test]
+    fn is_installed_ffmpeg_needs_both() {
+        let d = tempfile::tempdir().unwrap();
+        let paths = tools_in(d.path());
+        fs::create_dir_all(paths.ffmpeg.parent().unwrap()).unwrap();
+        fs::write(&paths.ffmpeg, "x").unwrap();
+        assert!(!is_installed(ToolName::Ffmpeg, &paths));
+        fs::write(&paths.ffprobe, "x").unwrap();
+        assert!(is_installed(ToolName::Ffmpeg, &paths));
+        assert!(!is_installed(ToolName::Ytdlp, &paths));
+    }
+
+    #[tokio::test]
+    async fn installed_version_runs_the_binary() {
+        let d = tempfile::tempdir().unwrap();
+        let mut paths = tools_in(d.path());
+        assert_eq!(installed_version(ToolName::Ffmpeg, &paths).await, None);
+        paths.ffmpeg = crate::testutil::script(
+            d.path(),
+            "ffmpeg",
+            r#"[ "$1" = "-version" ] && echo "ffmpeg version 9.0.2-x""#,
+        );
+        assert_eq!(
+            installed_version(ToolName::Ffmpeg, &paths).await.as_deref(),
+            Some("9.0.2")
+        );
+    }
+
+    /// Network: resolves and installs the real latest release of each tool.
+    #[tokio::test]
+    #[ignore]
+    async fn installs_latest_of_each_tool() {
+        let d = tempfile::tempdir().unwrap();
+        let paths = tools_in(d.path());
+        let client = http_client();
+        for tool in ALL_TOOLS {
+            let release = latest(&client, tool).await.unwrap();
+            println!("{tool:?}: {release:?}");
+            install(&client, tool, &release, &paths).await.unwrap();
+            assert!(is_installed(tool, &paths));
+            assert_eq!(
+                installed_version(tool, &paths).await.as_deref(),
+                Some(release.version.as_str())
+            );
+        }
+        let encoders = runner::output(
+            &paths.ffmpeg,
+            &["-hide_banner".to_string(), "-encoders".to_string()],
+        )
+        .await
+        .unwrap();
+        let missing: Vec<_> = [
+            "libx264",
+            "libx265",
+            "libvpx-vp9",
+            "libmp3lame",
+            "libopus",
+            "h264_videotoolbox",
+            "hevc_videotoolbox",
+            "prores_videotoolbox",
+            "prores_ks",
+        ]
+        .into_iter()
+        .filter(|e| !encoders.split_whitespace().any(|w| w == *e))
+        .collect();
+        assert!(missing.is_empty(), "missing encoders: {missing:?}");
     }
 
     #[test]
