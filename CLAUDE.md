@@ -44,6 +44,6 @@
 
 - 다음 작업은 사용자가 명시적으로 승인하기 전에는 절대 실행하지 않는다.
   - `git reset --hard`, `git push --force`, 파일 대량 삭제, 브랜치 삭제
-  - 릴리스 작업(서명 빌드 업로드, `scripts/latest-json.mjs`), `gh release` 명령
+  - 릴리스 스크립트(`scripts/release-macos.sh`, `scripts/latest-json.mjs`), `gh release` 명령
   - 배포된 마이그레이션 파일 수정
 - `bump-version-up.sh`는 GitHub Actions가 실행한다(`master`로 PR이 머지될 때). 로컬에서 버전 파일을 직접 고치지 않는다.

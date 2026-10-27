@@ -67,7 +67,8 @@ yarn lint                # ESLint + Prettier (@bob-park 설정)
 
 ```bash
 yarn tauri build --no-bundle         # 서명 키 없이 릴리스 컴파일만 확인
-yarn tauri build --bundles app,dmg   # .app/.dmg + 업데이터 아티팩트 (서명 키 필요, release.md 참고)
+yarn tauri build --bundles app,dmg   # .app/.dmg + 업데이터 아티팩트 (서명 키 필요, 아래 서명 준비 참고)
+scripts/release-macos.sh --build-only   # Developer ID 서명 + API 키로 .app/.dmg 공증 (업로드 없음)
 ```
 
 - 결과물은 워크스페이스의 `target/release/bundle/`에 생긴다.
@@ -75,38 +76,48 @@ yarn tauri build --bundles app,dmg   # .app/.dmg + 업데이터 아티팩트 (�
 
 ## 서명 준비 (한 번)
 
-### Apple Developer ID
+모두 로그인 키체인과 `~/.config/apple/`에 둔다. 저장소에는 절대 넣지 않는다. `scripts/release-macos.sh`가 여기서 읽어 온다.
+
+### Apple Developer ID와 공증 API 키
 
 - "Developer ID Application" 인증서가 키체인에 있어야 한다. `security find-identity -v -p codesigning`으로 확인한다.
-- 공증에 쓸 앱 전용 암호를 https://account.apple.com 에서 만든다.
+- `~/.config/apple/.env` (앱 공통):
+
+  ```sh
+  APPLE_SIGNING_IDENTITY="Developer ID Application: <이름> (<TEAM_ID>)"
+  ```
+
+- 공증은 App Store Connect **API 키** 방식이다(Apple ID/앱 전용 암호 방식은 쓰지 않는다).
+  1. App Store Connect → 사용자 및 액세스 → 통합 → App Store Connect API에서 키를 만든다(액세스: Developer).
+  2. 내려받은 `AuthKey_<키 ID>.p8`을 `~/.config/apple/`에 둔다. 한 번만 내려받을 수 있으니 백업한다.
+  3. 키 ID와 발급자 ID(Issuer ID)를 로그인 키체인에 넣는다.
+
+     ```sh
+     security add-generic-password -a "$USER" -s tauri-apple-api-key -w '<키 ID>'
+     security add-generic-password -a "$USER" -s tauri-apple-api-issuer -w '<Issuer ID>'
+     ```
+
+- 환경에 예전 `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID`가 남아 있으면 지운다. `APPLE_ID`가 있으면 Tauri가 API 키 대신 그쪽으로 공증한다. 예전 `~/.config/kiri/sign.env`는 더 쓰지 않는다.
 
 ### 업데이트 서명 키
 
+키는 이미 만들어져 있고, 공개키는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`에 들어 있다. 새 Mac에서는 개인키 **내용**(파일 경로가 아님)과 암호를 키체인에 넣는다.
+
 ```sh
-yarn tauri signer generate -w ~/.tauri/kiri.key   # 암호를 정해 입력
+security add-generic-password -a "$USER" -s tauri-updater-kiri -w "$(cat <개인키 파일>)"
+security add-generic-password -a "$USER" -s tauri-updater-kiri-pw -w '<키 암호>'
 ```
 
-- 공개키(`~/.tauri/kiri.key.pub` 내용)는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`에 넣는다. 현재 저장소에는 이미 들어 있다.
+- 직접 `yarn tauri build --bundles app,dmg`를 할 때는 먼저 `source scripts/load-updater-key-macos.sh`를 실행한다.
+- 키 암호가 맞는지 미리 확인하려면 작은 파일에 서명해 본다. `.sig` 파일이 생기면 정상이다.
+
+  ```sh
+  echo test > /tmp/t && ( source scripts/load-updater-key-macos.sh && yarn tauri signer sign /tmp/t ) && ls /tmp/t.sig
+  ```
+
+- 개인키 파일은 오프라인 백업만 남기고 작업 기계에서 지운다. 개인키와 암호를 잃어버리면 이미 설치된 앱에 더 이상 업데이트를 보낼 수 없다.
+- 키를 새로 만들면(`yarn tauri signer generate`) 이미 설치된 앱은 새 키로 서명된 업데이트를 받지 못하고, 사용자가 직접 다시 설치해야 한다. 개인키를 잃어버렸을 때만 바꾼다.
 - 공개키가 비어 있으면 릴리스 빌드는 `updater pubkey is empty — see docs/development.md` 오류로 실패하고(`build.rs`), `scripts/latest-json.mjs`도 실행을 거부한다.
-- 개인키와 암호를 잃어버리면 이미 설치된 앱에 더 이상 업데이트를 보낼 수 없다. 따로 안전하게 보관한다.
-
-### `~/.config/kiri/sign.env` (커밋 금지)
-
-```sh
-APPLE_SIGNING_IDENTITY="Developer ID Application: <이름> (<TEAM_ID>)"
-APPLE_ID="<apple id 이메일>"
-APPLE_PASSWORD="<앱 전용 암호>"
-APPLE_TEAM_ID="<TEAM_ID>"
-TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/kiri.key"
-TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<업데이트 키 암호>"
-```
-
-키 암호가 맞는지 미리 확인하려면 작은 파일에 서명해 본다. `.sig` 파일이 생기면 정상이다.
-
-```sh
-echo test > /tmp/t && ( set -a; . ~/.config/kiri/sign.env; set +a;
-  TAURI_SIGNING_PRIVATE_KEY="$(cat "$TAURI_SIGNING_PRIVATE_KEY")" yarn tauri signer sign /tmp/t ) && ls /tmp/t.sig
-```
 
 ## 프로젝트 구조
 
@@ -131,7 +142,7 @@ src-tauri/
    ├─ app/                    # 앱 껍데기: state, windows, tray(+앱 메뉴), updater, quit, cli_install, ipc_server, i18n(네이티브 라벨)
    ├─ domain/<name>/          # settings, queue: mod.rs(공개 API) · model.rs · repository.rs(SQL) · commands.rs / tools: mod.rs · commands.rs
    └─ shared/                 # db.rs(열기·마이그레이션), migrations/*.sql, error.rs(AppError)
-scripts/                      # fetch-ffmpeg.sh + ffmpeg.lock, build-cli.sh, latest-json.mjs
+scripts/                      # fetch-ffmpeg.sh + ffmpeg.lock, build-cli.sh, release-macos.sh, load-updater-key-macos.sh, latest-json.mjs
 bump-version-up.sh            # 버전 올림 (master 머지 때 GitHub Actions가 실행)
 docs/agents/                  # 에이전트용 규칙 (AGENTS.md에서 시작)
 docs/design/                  # 디자인 기준: aurora-glass.md, kraken-design.md

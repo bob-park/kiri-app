@@ -10,7 +10,7 @@ related:
 
 # Configuration & Secrets
 
-> App config is `src-tauri/tauri.conf.json`. Webview permissions are in `src-tauri/capabilities/default.json`. Secrets (Apple credentials, updater signing key, npm token) live **outside the repo**: `~/.config/kiri/sign.env`, `~/.tauri/kiri.key` and the `GITHUB_NPM_AUTH_TOKEN` env var. **Never commit a secret.**
+> App config is `src-tauri/tauri.conf.json`. Webview permissions are in `src-tauri/capabilities/default.json`. Secrets (signing keys, Apple credentials, npm token) live **outside the repo**: the login keychain, `~/.config/apple/` and the `GITHUB_NPM_AUTH_TOKEN` env var. **Never commit a secret.**
 
 ## `tauri.conf.json`
 
@@ -39,10 +39,12 @@ related:
 
 | Secret | Where | Used by |
 | ------ | ----- | ------- |
-| Apple signing identity, Apple ID, app-specific password, team ID | `~/.config/kiri/sign.env` | `yarn tauri build` (sign + notarize the `.app`), `xcrun notarytool` (dmg) |
-| `TAURI_SIGNING_PRIVATE_KEY` (+ password) | `~/.tauri/kiri.key`, path and password in `sign.env` | `yarn tauri build` (updater `.sig`) |
+| `APPLE_SIGNING_IDENTITY` (Developer ID) | `~/.config/apple/.env` (shared by all apps) | `scripts/release-macos.sh` (code signing) |
+| App Store Connect API key ID / issuer ID | login keychain, services `tauri-apple-api-key` / `tauri-apple-api-issuer` | `scripts/release-macos.sh` (notarization) |
+| App Store Connect API private key | `~/.config/apple/AuthKey_<key id>.p8` | `scripts/release-macos.sh` (`APPLE_API_KEY_PATH`) |
+| `TAURI_SIGNING_PRIVATE_KEY` (+ password) | login keychain, services `tauri-updater-kiri` / `tauri-updater-kiri-pw`, exported by `source scripts/load-updater-key-macos.sh` | `yarn tauri build`, `scripts/release-macos.sh` |
 | `GITHUB_NPM_AUTH_TOKEN` | shell env | `yarn install` (`@bob-park/*` from GitHub Packages) |
 | `GITHUB_TOKEN` | Actions-provided | `bump-version.yml` |
 
 - Don't print secrets in logs, scripts, or commit messages.
-- `TAURI_SIGNING_PRIVATE_KEY` must hold the key **contents** when building (`"$(cat "$TAURI_SIGNING_PRIVATE_KEY")"`); a path to a missing file fails late with `Invalid symbol 46` ([release](../release.md)).
+- If the stored key is not the key **content** (a path, a truncated value), the build fails late with `Invalid symbol` ([release](../release.md#문제-해결)).

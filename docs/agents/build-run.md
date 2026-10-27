@@ -10,7 +10,7 @@ related:
 
 # Build & Run
 
-> Run `yarn sidecars` once after cloning (ffmpeg/ffprobe + the `kiri` CLI), then `yarn tauri dev` runs the app with hot reload. `yarn tauri build --no-bundle` checks a release compile without signing keys. Releases follow [release](./workflow/release.md).
+> Run `yarn sidecars` once after cloning (ffmpeg/ffprobe + the `kiri` CLI), then `yarn tauri dev` runs the app with hot reload. `yarn tauri build --no-bundle` checks a release compile without signing keys. Releases go through `scripts/release-macos.sh` ([release](./workflow/release.md)).
 
 ## Setup
 
@@ -31,7 +31,8 @@ mise exec -- yarn sidecars       # src-tauri/binaries/: ffmpeg, ffprobe, kiri-cl
 | ------- | ------------ |
 | `yarn tauri dev` | Vite on :1420 + debug Rust app; frontend hot-reloads, Rust/config changes rebuild and restart |
 | `yarn tauri build --no-bundle` | release compile, no `.app`/`.dmg`, no signing key needed |
-| `yarn tauri build --bundles app,dmg` | `.app` + `.dmg` + updater artifacts; needs `TAURI_SIGNING_PRIVATE_KEY` |
+| `yarn tauri build --bundles app,dmg` | `.app` + `.dmg` + updater artifacts; needs `TAURI_SIGNING_PRIVATE_KEY` (first `source scripts/load-updater-key-macos.sh`) |
+| `scripts/release-macos.sh --build-only` | Developer ID signed `.app` + `.dmg`, both notarized and stapled with the App Store Connect API key; no upload ([configuration](./configuration.md#secrets)) |
 | `yarn build` | frontend only (`tsc` + `vite build`) |
 | `yarn sidecars` | `scripts/fetch-ffmpeg.sh` + `scripts/build-cli.sh` |
 | `yarn prettier` | format `src/` |
