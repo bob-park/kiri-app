@@ -42,7 +42,7 @@ if ! $build_only; then
   fi
 fi
 
-yarn sidecars # ffmpeg/ffprobe + kiri-cli: externalBin must exist before bundling
+yarn sidecars # kiri-cli: externalBin must exist before bundling
 yarn tauri build --bundles app,dmg
 
 bundle="target/release/bundle"
